@@ -51,19 +51,28 @@ layout(set = 0, binding = 1) uniform sampler2D Source;
 layout(set = 0, binding = 2) uniform sampler2D Original;
 
 // Fraction of radius at which area of segment equals area of other part.
-#define AREA_EQUIB 0.40397275
+// #define AREA_EQUIB 0.40397275
+#define AREA_EQUIB (1-0.40397275)
+// #define AREA_EQUIB 0.40397275 * 2.0
+
+// Linear function that crosses 0.5 from above at the given offset with the given slope.
+// Clamped to [0, 1]
+float soft_mix_weight(float x, float offset, float slope) {
+    return clamp(0.5 - slope * (x - offset), 0.0, 1.0);
+}
 
 vec3 color_to_radii(vec3 c) {
     return pow(mix(param.MIN_THICK.xxx, param.MAX_THICK.xxx, c), param.THICK_FALLOFF.xxx) * 0.5f;
 }
 
 void draw_scanline(inout float existing, float c, float coord_y_fract, float radius) {
-    existing = mix(existing, c, float(abs(coord_y_fract) < radius));
+    existing =
+        mix(existing, c, soft_mix_weight(coord_y_fract * coord_y_fract, radius * radius, 10.0));
 }
 
 void draw_circle(inout float existing, float c, vec2 coord, vec2 center, float radius) {
     const vec2 delta = coord - center;
-    existing = mix(existing, c, float(dot(delta, delta) < radius * radius));
+    existing = mix(existing, c, soft_mix_weight(dot(delta, delta), radius * radius, 10.0));
 }
 
 void main() {
