@@ -52,7 +52,7 @@ layout(set = 0, binding = 2) uniform sampler2D Original;
 
 // Fraction of radius at which area of segment equals area of other part.
 // #define AREA_EQUIB 0.40397275
-#define AREA_EQUIB (1-0.40397275)
+#define AREA_EQUIB (1 - 0.40397275)
 // #define AREA_EQUIB 0.40397275 * 2.0
 
 // Linear function that crosses 0.5 from above at the given offset with the given slope.
@@ -65,9 +65,9 @@ vec3 color_to_radii(vec3 c) {
     return pow(mix(param.MIN_THICK.xxx, param.MAX_THICK.xxx, c), param.THICK_FALLOFF.xxx) * 0.5f;
 }
 
-void draw_scanline(inout float existing, float c, float coord_y_fract, float radius) {
+void draw_scanline(inout float existing, float c, float coord_y_fract, float radius, float w) {
     existing =
-        mix(existing, c, soft_mix_weight(coord_y_fract * coord_y_fract, radius * radius, 10.0));
+        mix(existing, c, w * soft_mix_weight(coord_y_fract * coord_y_fract, radius * radius, 10.0));
 }
 
 void draw_circle(inout float existing, float c, vec2 coord, vec2 center, float radius) {
@@ -75,10 +75,16 @@ void draw_circle(inout float existing, float c, vec2 coord, vec2 center, float r
     existing = mix(existing, c, soft_mix_weight(dot(delta, delta), radius * radius, 10.0));
 }
 
+void swap(inout float a, inout float b) {
+    const float tmp = a;
+    a = b;
+    b = tmp;
+}
+
 void main() {
-    const vec3 l = texture(Source, vTexCoord - vec2(param.SourceSize.z, 0.0)).rgb;
-    const vec3 m = texture(Source, vTexCoord).rgb;
-    const vec3 r = texture(Source, vTexCoord + vec2(param.SourceSize.z, 0.0)).rgb;
+    vec3 c[3] = { texture(Source, vTexCoord - vec2(param.SourceSize.z, 0.0)).rgb,
+                  texture(Source, vTexCoord).rgb,
+                  texture(Source, vTexCoord + vec2(param.SourceSize.z, 0.0)).rgb };
 
     const vec2 coord_src_px = vTexCoord * param.SourceSize.xy - vec2(0.0, param.SUBPX_POS);
     vec2 coord_src_int;
@@ -86,6 +92,40 @@ void main() {
 
     FragColor = vec4(vec3(0.0), 1.0);
 
+    vec3 radii[3] = { color_to_radii(c[0]), color_to_radii(c[1]), color_to_radii(c[2]) };
+    // const vec3 spot_center[3] = {- radii[0] * AREA_EQUIB, }
+    vec3 scanline_weight[3] = {
+        vec3(1.0 - coord_src_fract.x, 1.0 - coord_src_fract.x, 1.0 - coord_src_fract.x),
+        vec3(1.0, 1.0, 1.0), vec3(coord_src_fract.x, coord_src_fract.x, coord_src_fract.x)
+    };
+
+    // for (int i = 0; i < 3; ++i) {
+    //     if (c[0][i] > c[1][i]) {
+    //         swap(c[0][i], c[1][i]);
+    //         swap(radii[0][i], radii[1][i]);
+    //         swap(scanline_weight[0][i], scanline_weight[1][i]);
+    //     }
+    //     if (c[0][i] > c[2][i]) {
+    //         swap(c[0][i], c[2][i]);
+    //         swap(radii[0][i], radii[2][i]);
+    //         swap(scanline_weight[0][i], scanline_weight[2][i]);
+    //     }
+    //     if (c[1][i] > c[2][i]) {
+    //         swap(c[1][i], c[2][i]);
+    //         swap(radii[1][i], radii[2][i]);
+    //         swap(scanline_weight[1][i], scanline_weight[2][i]);
+    //     }
+    // }
+
+    // Draw from smallest to biggest
+    // for (int i = 0; i < 3; ++i) {
+    //     for (int j = 0; j < 3; ++j) {
+    //         draw_scanline(FragColor[j], c[i][j], coord_src_fract.y, radii[i][j],
+    //                       scanline_weight[i][j]);
+    //     }
+    // }
+
+#if 0
     const vec3 radii_l = color_to_radii(l);
     const vec3 radii_m = color_to_radii(m);
     const vec3 radii_r = color_to_radii(r);
@@ -120,4 +160,5 @@ void main() {
                         radii_r[c]);
         }
     }
+#endif
 }
