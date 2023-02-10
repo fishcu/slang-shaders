@@ -13,7 +13,7 @@
 #pragma parameter CRT1TAP_SETTINGS "=== CRT-3tap v1.0 settings ===" 0.0 0.0 1.0 1.0
 #pragma parameter MIN_THICK "MIN_THICK: Scanline thickness of dark pixels." 0.3 0.0 1.4 0.05
 #pragma parameter MAX_THICK "MAX_THICK: Scanline thickness of bright pixels." 0.8 0.0 1.4 0.05
-#pragma parameter SHARP "SHARP: Sharpness of the scanline boundary." 1.0 0.0 1.0 0.05
+#pragma parameter SHARP "SHARP: Sharpness of the scanline boundary." 1.0 1.0 20.0 1.0
 #pragma parameter SUBPX_POS "SUBPX_POS: Scanline subpixel position." 0.0 -0.5 0.5 0.01
 #pragma parameter THICK_FALLOFF "THICK_FALLOFF: Reduction of thinner scanlines." 0.65 0.2 2.0 0.05
 // clang-format on
@@ -67,12 +67,13 @@ vec3 color_to_radii(vec3 c) {
 
 void draw_scanline(inout float existing, float c, float coord_y_fract, float radius, float w) {
     existing =
-        mix(existing, c, w * soft_mix_weight(coord_y_fract * coord_y_fract, radius * radius, 10.0));
+        mix(existing, c,
+            w * soft_mix_weight(coord_y_fract * coord_y_fract, radius * radius, param.SHARP));
 }
 
 void draw_circle(inout float existing, float c, vec2 coord, vec2 center, float radius) {
     const vec2 delta = coord - center;
-    existing = mix(existing, c, soft_mix_weight(dot(delta, delta), radius * radius, 10.0));
+    existing = mix(existing, c, soft_mix_weight(dot(delta, delta), radius * radius, param.SHARP));
 }
 
 void swap(inout float a, inout float b) {
@@ -94,10 +95,25 @@ void main() {
 
     vec3 radii[3] = { color_to_radii(c[0]), color_to_radii(c[1]), color_to_radii(c[2]) };
     // const vec3 spot_center[3] = {- radii[0] * AREA_EQUIB, }
-    vec3 scanline_weight[3] = {
-        vec3(1.0 - coord_src_fract.x, 1.0 - coord_src_fract.x, 1.0 - coord_src_fract.x),
-        vec3(1.0, 1.0, 1.0), vec3(coord_src_fract.x, coord_src_fract.x, coord_src_fract.x)
-    };
+    vec3 scanline_weight =
+        vec3(min(1.0, AREA_EQUIB * 0.5 + 1.0 - coord_src_fract.x), 1.0, min(1.0, AREA_EQUIB * 0.5 + coord_src_fract.x));
+
+    for (int i = 0; i < 3; ++i) {
+        if (c[0][i] < c[1][i]) {
+            draw_scanline(FragColor[i], c[0][i], coord_src_fract.y, radii[0][i],
+                          scanline_weight[0]);
+        } else {
+            draw_scanline(FragColor[i], c[1][i], coord_src_fract.y, radii[1][i], scanline_weight[1] * 0.5);
+        }
+        if (c[2][i] < c[1][i]) {
+            draw_scanline(FragColor[i], c[2][i], coord_src_fract.y, radii[2][i],
+                          scanline_weight[2]);
+        } else {
+            draw_scanline(FragColor[i], c[1][i], coord_src_fract.y, radii[1][i], scanline_weight[1] * 0.5);
+        }
+        draw_scanline(FragColor[i], c[1][i], coord_src_fract.y, radii[1][i], scanline_weight[1]);
+        
+    }
 
     // for (int i = 0; i < 3; ++i) {
     //     if (c[0][i] > c[1][i]) {
