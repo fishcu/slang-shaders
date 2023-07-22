@@ -14,7 +14,7 @@
 #pragma parameter MIN_THICK "Scanline thickness of dark pixels" 0.3 0.0 1.4 0.05
 #pragma parameter MAX_THICK "Scanline thickness of bright pixels" 0.9 0.0 1.4 0.05
 #pragma parameter V_SHARP "Vertical sharpness of the scanline" 1.0 0.0 10.0 0.1
-#pragma parameter H_SHARP "Horizontal sharpness of pixel transitions" 20.0 2.0 200.0 5.0
+#pragma parameter H_SHARP "Horizontal sharpness of pixel transitions" 2.0 2.0 20.0 0.5
 #pragma parameter SUBPX_POS "Scanline subpixel position" 0.0 -0.5 0.5 0.01
 #pragma parameter THICK_FALLOFF "Reduction / increase of thinner scanlines" 0.65 0.2 2.0 0.01
 // clang-format on
@@ -125,6 +125,11 @@ vec2 smaxN(float a, float b, float k, float n) {
     return (a > b) ? vec2(a + s, m) : vec2(b + s, 1.0 - m);
 }
 
+float expStep(float x, float k, float n) {
+    k = pow(0.1, -n) * 0.693;
+    return exp(-k * pow(x, n));
+}
+
 void blend_circles(vec2 coord,                 //
                    vec2 center1, vec3 color1,  //
                    vec2 center2, vec3 color2,  //
@@ -157,21 +162,24 @@ void blend_circles(vec2 coord,                 //
         //     clamp(smooth_max(w1 * color1[c], w2 * color2[c]), 0.0, max(color1[c], color2[c]));
 
         // Using sminN distances and blend weight
-        const float res = smooth_min(max(0.0, dist1), max(0.0, dist2), -param.V_SHARP);
+        // const float res = smooth_min(max(0.0, dist1), max(0.0, dist2), -param.V_SHARP);
         // const vec2 res = smin3(dist1 - color1[c]*0.1, dist2 - color2[c]*0.1, param.V_SHARP *
         // 0.07);
-        const float w = smoothstep(0.0, 1.0, 1.0 - res.x * 20.0);
-        result[c] = w * color1[c];
-        //result[c] = w * mix(color1[c], color2[c], res.y);
+        // const float w = smoothstep(0.0, 1.0, 1.0 - res.x * 20.0);
+        // result[c] = w * color1[c];
+        // result[c] = w * mix(color1[c], color2[c], res.y);
         // result[c] = float(res <= 0.0);
 
         // Using smax(N)
-        // const float w1 = smoothstep(0.0, 1.0, 1.0 - dist1 * 20.0);
-        // const float w2 = smoothstep(0.0, 1.0, 1.0 - dist2 * 20.0);
-        // const float res = smax3(w1 * color1[c], w2 * color2[c], param.V_SHARP * 0.07);
+        const float w1 = smoothstep(0.0, 1.0, (0.5 - dist1 * param.H_SHARP));
+        const float w2 = smoothstep(0.0, 1.0, (0.5 - dist2 * param.H_SHARP));
+        // const float w1 = expStep(max(0.0, dist1 + 0.1), 1.0, param.H_SHARP);
+        // const float w2 = expStep(max(0.0, dist2 + 0.1), 1.0, param.H_SHARP);
+        const float res = smooth_max(w1 * color1[c], w2 * color2[c]);
         // const float dist = smin3(dist1, dist2, param.V_SHARP * 0.07).x;
         // const float w = smoothstep(0.0, 1.0, 1.0 - dist * 20.0);
-        // result[c] = clamp(res * w, 0.0, max(color1[c], color2[c]));
+        result[c] = res;
+        // result[c] = clamp(res, 0.0, max(color1[c], color2[c]));
 
         // screen blend
         // const float w1 = smoothstep(0.0, 1.0, 1.0 - dist1 * 20.0);
@@ -194,10 +202,10 @@ void main() {
 
     FragColor = vec4(0.0, 0.0, 0.0, 1.0);
 
-    const vec2 center1 = vec2(0.3, 0.5);
-    const vec3 color1 = vec3(0.9, 0.9, 0.9);
+    const vec2 center1 = vec2(0.5, 0.5);
+    const vec3 color1 = vec3(0.7, 0.7, 0.7);
     const vec2 center2 = center1;
-    const vec3 color2 = vec3(0.5, 0.5, 0.5);
+    const vec3 color2 = vec3(0.6, 0.6, 0.6);
 
     blend_circles(vTexCoord,        //
                   center1, color1,  //
