@@ -64,10 +64,9 @@ layout(set = 0, binding = 2) uniform sampler2D Original;
 
 float[5] get_gaussian() {
     float result[5];
-    // mean zero, std. dev. 1
-    // use 2.5 std. devs.
-    const float lower = -2.5;
-    const float higher = 2.5;
+    // mean 0, std. dev. 1
+    const float lower = -2.0;
+    const float higher = 2.0;
     const float step = (higher - lower) / (5.0 - 1.0);
     float sum = 0.0;
     for (int i = 0; i < 5; ++i) {
@@ -103,17 +102,17 @@ vec3 get_dist_signal(float y_fract, vec3 signal) {
     // I.e., maximally saturated values are used on the scanline,
     // and black is used for the scanline gap.
     // Intermediate values are used for the purpose of anti-aliasing.
-    const float eff_aa_strength = sqrt(param.AA_STRENGTH);
-    const vec2 px_per_tx =
-        param.OriginalSize.zw * param.OutputSize.xy / eff_aa_strength;
-    const vec2 tx_per_px =
-        param.OriginalSize.xy * param.OutputSize.zw * eff_aa_strength;
+    // const float eff_aa_strength = sqrt(param.AA_STRENGTH);
+    const float m =
+        param.OriginalSize.w * param.OutputSize.y / param.AA_STRENGTH;
+    const float x = abs(y_fract - 0.5);
 
-    const float delta_y = abs(y_fract - 0.5);
-    const float dy_corr =
-        tx_per_px.y * 0.5 + delta_y * (1.0 - 2.0 * tx_per_px.y);
-    return clamp(vec3(0.0), vec3(1.0),
-                 0.5 + px_per_tx.y * (signal * 0.5 - dy_corr));
+    // Handle both cases, first element of mix is c when no part of scanline is
+    // fully saturated, second element of mix is when at least some part of the
+    // scanline is fully saturated.
+    const vec3 c = mix(sqrt(m * signal), 0.5 + m * signal * 0.5,
+                       step(vec3(1.0 / m), signal));
+    return clamp(c - m * x, vec3(0.0), vec3(1.0));
 }
 
 void main() {
@@ -140,15 +139,28 @@ void main() {
 
     // Get the brightest possible value within the current pixel, which is the
     // one closest to the scanline.
-    const float nearest_y =
-        clamp((floor(vTexCoord.y * param.OriginalSize.y) + 0.5) *
-                  param.OriginalSize.w,
-              vTexCoord.y - param.OutputSize.w * 0.5,
-              vTexCoord.y + param.OutputSize.w * 0.5);
-    const float nearest_y_fract = fract(nearest_y * param.OriginalSize.y);
+    // const float nearest_y =
+    //     clamp((floor(vTexCoord.y * param.OriginalSize.y) + 0.5) *
+    //               param.OriginalSize.w,
+    //           vTexCoord.y - param.OutputSize.w * 0.5,
+    //           vTexCoord.y + param.OutputSize.w * 0.5);
+    // const float nearest_y_fract = fract(nearest_y * param.OriginalSize.y);
+    // FragColor.rgb = get_dist_signal(nearest_y_fract, signal);
 
-    FragColor.rgb = get_dist_signal(nearest_y_fract, signal);
+    // FragColor.rgb =
+    //     get_dist_signal(fract(vTexCoord.y * param.OriginalSize.y), signal);
+
+    const int msaa_samples = 20;
+    vec3 accum_signal = vec3(0.0);
+    float floor_y = floor(vTexCoord.y * param.OutputSize.y);
+    for (int i = 0; i < msaa_samples; ++i) {
+        accum_signal +=
+            get_dist_signal(fract((floor_y + float(i) / msaa_samples) *
+                                  param.OutputSize.w * param.OriginalSize.y),
+                            signal);
+    }
+    FragColor.rgb = accum_signal / msaa_samples;
+
     FragColor.rgb = to_srgb(FragColor.rgb);
-
     FragColor[3] = 1.0;
 }
