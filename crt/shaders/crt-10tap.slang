@@ -11,7 +11,7 @@
 
 // clang-format off
 #pragma parameter CRT10TAP_SETTINGS "=== CRT-10tap v1.0 settings ===" 0.0 0.0 1.0 1.0
-#include "crt-Ntap-common-params.slang"
+// #include "crt-Ntap-common-params.slang"
 #pragma parameter S_GAMMA_OFFS "Signal gamma offset" 0.0 -2.0 2.0 0.1
 #pragma parameter AA_STRENGTH "Smoothing strength" 1.0 0.5 4.0 0.1
 
@@ -135,7 +135,7 @@ void main() {
     // FragColor = texture(Original, (src_tx_int + vec2(0.5 +
     // smoothstep(0.0, 1.0, src_tx_fract.x), 0.5)) * param.OriginalSize.zw);
 
-    const vec3 signal = to_lin(texture(Original, vTexCoord).rgb);
+    const vec3 signal = to_lin(texture(Source, vTexCoord).rgb);
 
     // Get the brightest possible value within the current pixel, which is the
     // one closest to the scanline.
@@ -150,16 +150,42 @@ void main() {
     // FragColor.rgb =
     //     get_dist_signal(fract(vTexCoord.y * param.OriginalSize.y), signal);
 
-    const int msaa_samples = 20;
-    vec3 accum_signal = vec3(0.0);
-    float floor_y = floor(vTexCoord.y * param.OutputSize.y);
-    for (int i = 0; i < msaa_samples; ++i) {
-        accum_signal +=
-            get_dist_signal(fract((floor_y + float(i) / msaa_samples) *
-                                  param.OutputSize.w * param.OriginalSize.y),
-                            signal);
+    // const int msaa_samples = 15;
+    // vec3 accum_signal = vec3(0.0);
+    // float floor_y = floor(vTexCoord.y * param.OutputSize.y);
+    // for (int i = 0; i < msaa_samples; ++i) {
+    //     accum_signal +=
+    //         get_dist_signal(fract((floor_y + float(i) / msaa_samples) *
+    //                               param.OutputSize.w * param.OriginalSize.y),
+    //                         signal);
+    // }
+    // FragColor.rgb = accum_signal / msaa_samples;
+
+    const float energy_fract_per_px = param.OriginalSize.y * param.OutputSize.w;
+    const float nearest_y =
+        clamp((floor(vTexCoord.y * param.OriginalSize.y) + 0.5) *
+                  param.OriginalSize.w,
+              vTexCoord.y - param.OutputSize.w * 0.5,
+              vTexCoord.y + param.OutputSize.w * 0.5);
+    if (nearest_y > vTexCoord.y - param.OutputSize.w * 0.5 &&
+        nearest_y < vTexCoord.y + param.OutputSize.w * 0.5) {
+        // Current pixel encompasses the scanline center. Handle each "side" of
+        // the scanline.
+        // nearest_y is the scanline center.
+        const float d1 = nearest_y - (vTexCoord.y - param.OutputSize.w * 0.5);
+        const float d2 = (vTexCoord.y + param.OutputSize.w * 0.5) - nearest_y;
+        FragColor.rgb = clamp(signal * 0.5 / energy_fract_per_px,
+                                   vec3(0.0), vec3(d1 * param.OutputSize.y)) +
+                        clamp(signal * 0.5 / energy_fract_per_px,
+                                   vec3(0.0), vec3(d2 * param.OutputSize.y));
+    } else {
+        // nearest_y is the pixel border facing towards the scanline center.
+        const float dist = abs(fract(nearest_y * param.OriginalSize.y) - 0.5);
+        const float energy_fract_spent = dist;
+        const vec3 energy_left_over = signal * 0.5 - energy_fract_spent;
+        FragColor.rgb =
+            clamp(energy_left_over / energy_fract_per_px, vec3(0.0), vec3(1.0));
     }
-    FragColor.rgb = accum_signal / msaa_samples;
 
     FragColor.rgb = to_srgb(FragColor.rgb);
     FragColor[3] = 1.0;
