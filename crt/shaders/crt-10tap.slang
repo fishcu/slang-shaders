@@ -12,6 +12,8 @@
 // clang-format off
 #pragma parameter CRT10TAP_SETTINGS "=== CRT-10tap v1.0 settings ===" 0.0 0.0 1.0 1.0
 // #include "crt-Ntap-common-params.slang"
+#pragma parameter MIN_THICK "Scanline thickness of dark pixels" 0.1 0.0 1.4 0.05
+#pragma parameter MAX_THICK "Scanline thickness of bright pixels" 0.9 0.0 1.4 0.05
 #pragma parameter S_GAMMA_OFFS "Signal gamma offset" 0.0 -2.0 2.0 0.1
 #pragma parameter AA_STRENGTH "Smoothing strength" 1.0 0.5 4.0 0.1
 
@@ -115,6 +117,22 @@ vec3 get_dist_signal(float y_fract, vec3 signal) {
     return clamp(c - m * x, vec3(0.0), vec3(1.0));
 }
 
+vec3 cumulative_energy_function(float x, float m, vec3 x0, vec3 y0) {
+    vec3 result;
+    for (int i = 0; i < 3; ++i) {
+        if (x <= x0[i]) {
+            result[i] = x * y0[i];
+        } else if (x < x0[i] + m) {
+            const float xs = (x - x0[i]) / m;
+            const float xs2 = xs * xs;
+            result[i] = x0[i] * y0[i] + xs * xs2 - 0.5 * xs2 * xs2;
+        } else {
+            result[i] = x0[i] * y0[i] + 0.5 * m * y0[i];
+        }
+    }
+    return result;
+}
+
 void main() {
     // FragColor.rgb = to_lin(texture(Original, vTexCoord).rgb);
     // FragColor[3] = 1.0;
@@ -135,7 +153,8 @@ void main() {
     // FragColor = texture(Original, (src_tx_int + vec2(0.5 +
     // smoothstep(0.0, 1.0, src_tx_fract.x), 0.5)) * param.OriginalSize.zw);
 
-    const vec3 signal = to_lin(texture(Source, vTexCoord).rgb);
+    const vec3 signal =
+        to_lin(texture(Source, vTexCoord).rgb) * param.MAX_THICK;
 
     // Get the brightest possible value within the current pixel, which is the
     // one closest to the scanline.
@@ -161,30 +180,56 @@ void main() {
     // }
     // FragColor.rgb = accum_signal / msaa_samples;
 
-    const float energy_fract_per_px = param.OriginalSize.y * param.OutputSize.w;
-    const float nearest_y =
-        clamp((floor(vTexCoord.y * param.OriginalSize.y) + 0.5) *
-                  param.OriginalSize.w,
-              vTexCoord.y - param.OutputSize.w * 0.5,
-              vTexCoord.y + param.OutputSize.w * 0.5);
-    if (nearest_y > vTexCoord.y - param.OutputSize.w * 0.5 &&
-        nearest_y < vTexCoord.y + param.OutputSize.w * 0.5) {
+    // const float tx_per_px = param.OriginalSize.w * param.OutputSize.y;
+    // const float px_upper =
+    //     (vTexCoord.y - param.OutputSize.w * 0.5) * param.OriginalSize.y;
+    // const float px_lower = px_upper + param.OutputSize.w *
+    // param.OriginalSize.y; const float scanline_center =
+    //     floor(vTexCoord.y * param.OriginalSize.y) + 0.5;
+    // if (scanline_center > px_upper && scanline_center < px_lower) {
+    //     // Current pixel encompasses the scanline center. Handle each "side"
+    //     of
+    //     // the scanline.
+    //     FragColor.rgb =
+    //         tx_per_px *
+    //         (clamp(signal * 0.5, vec3(0.0), vec3(scanline_center - px_upper))
+    //         +
+    //          clamp(signal * 0.5, vec3(0.0), vec3(px_lower -
+    //          scanline_center)));
+    // } else {
+    //     // nearest_y is the pixel border facing towards the scanline center.
+    //     const float nearest_y = clamp(scanline_center, px_upper, px_lower);
+    //     const vec3 energy_left_over =
+    //         signal * 0.5 - abs(fract(nearest_y) - 0.5);
+    //     FragColor.rgb =
+    //         clamp(energy_left_over * tx_per_px, vec3(0.0), vec3(1.0));
+    // }
+
+    const float min_thick = param.MIN_THICK * 0.5;
+    const float m =
+        param.OriginalSize.y * param.OutputSize.w * param.AA_STRENGTH;
+    const float px_upper =
+        (vTexCoord.y - param.OutputSize.w * 0.5) * param.OriginalSize.y;
+    const float px_lower = px_upper + param.OutputSize.w * param.OriginalSize.y;
+    const float scanline_center =
+        floor(vTexCoord.y * param.OriginalSize.y) + 0.5;
+    // decision boundary
+    const vec3 signal_step = step(vec3(2.0 * min_thick + 0.5 * m), signal);
+    const vec3 x0 = mix(vec3(min_thick), 0.5 * (signal - m), signal_step);
+    const vec3 y0 =
+        mix((sqrt(min_thick * min_thick + signal * m) - min_thick) / m,
+            vec3(1.0), signal_step);
+    if (scanline_center > px_upper && scanline_center < px_lower) {
         // Current pixel encompasses the scanline center. Handle each "side" of
         // the scanline.
-        // nearest_y is the scanline center.
-        const float d1 = nearest_y - (vTexCoord.y - param.OutputSize.w * 0.5);
-        const float d2 = (vTexCoord.y + param.OutputSize.w * 0.5) - nearest_y;
-        FragColor.rgb = clamp(signal * 0.5 / energy_fract_per_px,
-                                   vec3(0.0), vec3(d1 * param.OutputSize.y)) +
-                        clamp(signal * 0.5 / energy_fract_per_px,
-                                   vec3(0.0), vec3(d2 * param.OutputSize.y));
-    } else {
-        // nearest_y is the pixel border facing towards the scanline center.
-        const float dist = abs(fract(nearest_y * param.OriginalSize.y) - 0.5);
-        const float energy_fract_spent = dist;
-        const vec3 energy_left_over = signal * 0.5 - energy_fract_spent;
         FragColor.rgb =
-            clamp(energy_left_over / energy_fract_per_px, vec3(0.0), vec3(1.0));
+            cumulative_energy_function(scanline_center - px_upper, m, x0, y0) +
+            cumulative_energy_function(px_lower - scanline_center, m, x0, y0);
+    } else {
+        const float d1 = abs(fract(px_upper) - 0.5);
+        const float d2 = abs(fract(px_lower) - 0.5);
+        FragColor.rgb = abs(cumulative_energy_function(d1, m, x0, y0) -
+                            cumulative_energy_function(d2, m, x0, y0));
     }
 
     FragColor.rgb = to_srgb(FragColor.rgb);
