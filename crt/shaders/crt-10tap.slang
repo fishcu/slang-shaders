@@ -121,13 +121,13 @@ vec3 cumulative_energy_function(float x, float m, vec3 x0, vec3 y0) {
     vec3 result;
     for (int i = 0; i < 3; ++i) {
         if (x <= x0[i]) {
-            result[i] = x * y0[i];
+            result[i] = y0[i] * x;
         } else if (x < x0[i] + m) {
             const float xs = (x - x0[i]) / m;
             const float xs2 = xs * xs;
-            result[i] = x0[i] * y0[i] + xs * xs2 - 0.5 * xs2 * xs2;
+            result[i] = y0[i] * (x0[i] + m * (xs - xs * xs2 + 0.5 * xs2 * xs2));
         } else {
-            result[i] = x0[i] * y0[i] + 0.5 * m * y0[i];
+            result[i] = y0[i] * (x0[i] + 0.5 * m);
         }
     }
     return result;
@@ -225,13 +225,30 @@ void main() {
         FragColor.rgb =
             cumulative_energy_function(scanline_center - px_upper, m, x0, y0) +
             cumulative_energy_function(px_lower - scanline_center, m, x0, y0);
+        // FragColor.rgb = vec3(1.0);
     } else {
         const float d1 = abs(fract(px_upper) - 0.5);
         const float d2 = abs(fract(px_lower) - 0.5);
         FragColor.rgb = abs(cumulative_energy_function(d1, m, x0, y0) -
                             cumulative_energy_function(d2, m, x0, y0));
     }
+    FragColor.rgb *= param.OutputSize.y * param.OriginalSize.w;
 
     FragColor.rgb = to_srgb(FragColor.rgb);
     FragColor[3] = 1.0;
+
+    // {
+    //     const vec3 signal = vec3(0.1, 0.5, 1.0);
+    //     const vec3 signal_step = step(vec3(2.0 * min_thick + 0.5 * m), signal);
+    //     const vec3 x0 = mix(vec3(min_thick), 0.5 * (signal - m), signal_step);
+    //     const vec3 y0 =
+    //         mix((sqrt(min_thick * min_thick + signal * m) - min_thick) / m,
+    //             vec3(1.0), signal_step);
+    //     const vec3 y = cumulative_energy_function(vTexCoord.x, m, x0, y0);
+    //     for (int i = 0; i < 3; ++i) {
+    //         if (abs(vTexCoord.y - y[i]) < 0.01) {
+    //             FragColor[i] = 1.0;
+    //         }
+    //     }
+    // }
 }
