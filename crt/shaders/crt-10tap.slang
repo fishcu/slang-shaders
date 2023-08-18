@@ -12,8 +12,8 @@
 // clang-format off
 #pragma parameter CRT10TAP_SETTINGS "=== CRT-10tap v1.0 settings ===" 0.0 0.0 1.0 1.0
 // #include "crt-Ntap-common-params.slang"
-#pragma parameter MIN_THICK "Scanline thickness of dark pixels" 0.1 0.0 1.4 0.05
-#pragma parameter MAX_THICK "Scanline thickness of bright pixels" 0.9 0.0 1.4 0.05
+#pragma parameter MIN_THICK "Scanline thickness of dark pixels" 0.0 0.0 1.4 0.05
+#pragma parameter MAX_THICK "Scanline thickness of bright pixels" 1.0 0.0 1.4 0.05
 #pragma parameter S_GAMMA_OFFS "Signal gamma offset" 0.0 -2.0 2.0 0.1
 #pragma parameter AA_STRENGTH "Smoothing strength" 1.0 0.5 4.0 0.1
 
@@ -130,7 +130,7 @@ vec3 cumulative_energy_function(float x, float m, vec3 x0, vec3 y0) {
             result[i] = y0[i] * (x0[i] + 0.5 * m);
         }
     }
-    return result;
+    return y0 * result;
 }
 
 void main() {
@@ -188,8 +188,7 @@ void main() {
     //     floor(vTexCoord.y * param.OriginalSize.y) + 0.5;
     // if (scanline_center > px_upper && scanline_center < px_lower) {
     //     // Current pixel encompasses the scanline center. Handle each "side"
-    //     of
-    //     // the scanline.
+    //     // of the scanline.
     //     FragColor.rgb =
     //         tx_per_px *
     //         (clamp(signal * 0.5, vec3(0.0), vec3(scanline_center - px_upper))
@@ -214,7 +213,7 @@ void main() {
     const float scanline_center =
         floor(vTexCoord.y * param.OriginalSize.y) + 0.5;
     // decision boundary
-    const vec3 signal_step = step(vec3(2.0 * min_thick + 0.5 * m), signal);
+    const vec3 signal_step = step(vec3(2.0 * min_thick + m), signal);
     const vec3 x0 = mix(vec3(min_thick), 0.5 * (signal - m), signal_step);
     const vec3 y0 =
         mix((sqrt(min_thick * min_thick + signal * m) - min_thick) / m,
@@ -238,17 +237,28 @@ void main() {
     FragColor[3] = 1.0;
 
     // {
-    //     const vec3 signal = vec3(0.1, 0.5, 1.0);
-    //     const vec3 signal_step = step(vec3(2.0 * min_thick + 0.5 * m), signal);
+    //     const vec3 signal = vec3(0.04, 0.08, 0.12);
+    //     const vec3 signal_step = step(vec3(2.0 * min_thick + m), signal);
+    //     // const vec3 signal_step = vec3(1.0);
     //     const vec3 x0 = mix(vec3(min_thick), 0.5 * (signal - m), signal_step);
     //     const vec3 y0 =
     //         mix((sqrt(min_thick * min_thick + signal * m) - min_thick) / m,
     //             vec3(1.0), signal_step);
-    //     const vec3 y = cumulative_energy_function(vTexCoord.x, m, x0, y0);
+    //     const vec3 y = 10 * cumulative_energy_function(vTexCoord.x, m, x0, y0);
     //     for (int i = 0; i < 3; ++i) {
     //         if (abs(vTexCoord.y - y[i]) < 0.01) {
     //             FragColor[i] = 1.0;
     //         }
+    //     }
+
+    //     if (abs(vTexCoord.y - 0.04 * 5) < 0.005) {
+    //         FragColor = vec4(1.0);
+    //     }
+    //     if (abs(vTexCoord.y - 0.08 * 5) < 0.005) {
+    //         FragColor = vec4(1.0);
+    //     }
+    //     if (abs(vTexCoord.y - 0.12 * 5) < 0.005) {
+    //         FragColor = vec4(1.0);
     //     }
     // }
 }
