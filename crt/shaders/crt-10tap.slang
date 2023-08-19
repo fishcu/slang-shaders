@@ -118,19 +118,28 @@ vec3 get_dist_signal(float y_fract, vec3 signal) {
 }
 
 vec3 cumulative_energy_function(float x, float m, vec3 x0, vec3 y0) {
-    vec3 result;
-    for (int i = 0; i < 3; ++i) {
-        if (x <= x0[i]) {
-            result[i] = y0[i] * x;
-        } else if (x < x0[i] + m) {
-            const float xs = (x - x0[i]) / m;
-            const float xs2 = xs * xs;
-            result[i] = y0[i] * (x0[i] + m * (xs - xs * xs2 + 0.5 * xs2 * xs2));
-        } else {
-            result[i] = y0[i] * (x0[i] + 0.5 * m);
-        }
-    }
-    return y0 * result;
+    // vec3 result;
+    // for (int i = 0; i < 3; ++i) {
+    //     if (x <= x0[i]) {
+    //         result[i] = y0[i] * x;
+    //     } else if (x < x0[i] + m) {
+    //         const float xs = (x - x0[i]) / m;
+    //         const float xs2 = xs * xs;
+    //         result[i] = y0[i] * (x0[i] + m * (xs - xs * xs2 + 0.5 * xs2 *
+    //         xs2));
+    //     } else {
+    //         result[i] = y0[i] * (x0[i] + 0.5 * m);
+    //     }
+    // }
+    // return y0 * result;
+    const vec3 xs = clamp((x - x0) / m, vec3(0.0), vec3(1.0));
+    const vec3 xs2 = xs * xs;
+    return y0 * (min(x0, vec3(x)) + m * (xs - xs * xs2 + 0.5 * xs2 * xs2));
+}
+
+vec3 energy_function(float x, float m, vec3 x0, vec3 y0) {
+    vec3 xs = clamp((x - x0) / m, vec3(0.0), vec3(1.0));
+    return y0 * (1 - 3 * xs * xs + 2 * xs * xs * xs);
 }
 
 void main() {
@@ -212,12 +221,9 @@ void main() {
     const float px_lower = px_upper + param.OutputSize.w * param.OriginalSize.y;
     const float scanline_center =
         floor(vTexCoord.y * param.OriginalSize.y) + 0.5;
-    // decision boundary
-    const vec3 signal_step = step(vec3(2.0 * min_thick + m), signal);
-    const vec3 x0 = mix(vec3(min_thick), 0.5 * (signal - m), signal_step);
-    const vec3 y0 =
-        mix((sqrt(min_thick * min_thick + signal * m) - min_thick) / m,
-            vec3(1.0), signal_step);
+
+    const vec3 x0 = max(vec3(min_thick), 0.5 * (signal - m));
+    const vec3 y0 = min(signal / (2.0 * min_thick + m), vec3(1.0));
     if (scanline_center > px_upper && scanline_center < px_lower) {
         // Current pixel encompasses the scanline center. Handle each "side" of
         // the scanline.
@@ -238,13 +244,12 @@ void main() {
 
     // {
     //     const vec3 signal = vec3(0.04, 0.08, 0.12);
-    //     const vec3 signal_step = step(vec3(2.0 * min_thick + m), signal);
-    //     // const vec3 signal_step = vec3(1.0);
-    //     const vec3 x0 = mix(vec3(min_thick), 0.5 * (signal - m), signal_step);
-    //     const vec3 y0 =
-    //         mix((sqrt(min_thick * min_thick + signal * m) - min_thick) / m,
-    //             vec3(1.0), signal_step);
+    //     // const vec3 signal = vec3(0.1, 0.3, 0.8);
+    //     const vec3 x0 = max(vec3(min_thick), 0.5 * (signal - m));
+    //     const vec3 y0 = min(signal / (2.0 * min_thick + m), vec3(1.0));
+
     //     const vec3 y = 10 * cumulative_energy_function(vTexCoord.x, m, x0, y0);
+    //     const vec3 e = energy_function(vTexCoord.x, m, x0, y0);
     //     for (int i = 0; i < 3; ++i) {
     //         if (abs(vTexCoord.y - y[i]) < 0.01) {
     //             FragColor[i] = 1.0;
