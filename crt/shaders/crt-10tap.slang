@@ -124,6 +124,22 @@ vec2 gradf(vec2 x, vec2 center, vec2 axes) {
     return 2.0 * (x - center) / (axes * axes + EPS);
 }
 
+float f2(vec2 x, vec2 center, vec2 axes) {
+    // const float f = length((x - center) / axes);
+    // return (f - 1.0) * f;
+    const vec2 a = (x - center) / (axes + EPS);
+    return length(a) - 1.0;
+}
+
+vec2 gradf2(vec2 x, vec2 center, vec2 axes) {
+    // return (x - center) / axes / axes;
+    // sqrt((x-center.x)^2 / a^2 + (y-center.y)^2 / b^2) - 1 = 0
+    // df/dx = 1/sqrt(...) * 2(x-center.x) / a^2;
+    // df/dy = 1/sqrt(...) * 2(y-center.y) / b^2;
+    const vec2 a = (x - center) / (axes + EPS);
+    return 2.0 * (x - center) / (length(a) * axes * axes + EPS);
+}
+
 vec3 sample_scanline_new(vec3 signal_1, vec3 signal_2, vec2 signal_center,
                          vec2 coord) {
     const float m =
@@ -150,7 +166,7 @@ vec3 sample_scanline_new(vec3 signal_1, vec3 signal_2, vec2 signal_center,
                                param.SourceSize.w;
 
     // get center of ellipse
-    const vec3 r = h1 / h2;
+    const vec3 r = h1 / (h2 + EPS);
     const vec3 x = eff_ellipse_w *
                    (PI / 4.0 * h2 * (w2 - w1) +
                     0.5 * h2 * w1 * (acos(r) - r * sqrt(1 - r * r))) /
@@ -204,7 +220,7 @@ void main() {
     // FragColor[3] = 1.0;
     // return
 
-    // const float m = param.OutputSize.w * param.AA_STRENGTH;
+    const float m = param.OutputSize.w * param.AA_STRENGTH * 100;
 
     // const vec2 axes = vec2(0.4, 0.3);
     // const vec2 center = vec2(0.5 + 0.785 * axes[0], 0.5);
@@ -213,14 +229,23 @@ void main() {
     // const vec2 gradfx = gradf(vTexCoord, center, axes);
     // // const vec2 gradfx = vec2(dFdx(fx), dFdy(fx)) / m;
 
-    // const float dist = fx / length(gradfx);
+    // float dist = fx / length(gradfx);
 
-    // // ellipse center
-    // const float x = 0.5;
+    // // Sanity check gradient
+    // if (vTexCoord.x < 0.3) {
+    //     dist = abs(vTexCoord.y - 0.5) - 0.2;
+    // }
 
-    // Draw ellipse
-    // FragColor = vec4(1.0 - smoothstep(-0.5 * m, 0.5 * m, dist), 0.0,
-    // 0.0, 1.0);
+    // // Draw shapes
+    // FragColor = vec4(1.0 - smoothstep(-0.5 * m, 0.5 * m, dist), 0.0, 0.0, 1.0);
+
+    // // Cross through middle
+    // if (abs(vTexCoord.x - 0.5) < param.OutputSize.z ||
+    //     abs(vTexCoord.y - 0.5) < param.OutputSize.w) {
+    //     FragColor.rgb = vec3(1.0) - FragColor.rgb;
+    // }
+
+    // return;
 
     // vec3 col = (dist > 0.0) ? vec3(0.9, 0.6, 0.3) : vec3(0.65, 0.85, 1.0);
     // col *= 1.05 - exp(-6.0 * abs(dist));
@@ -233,11 +258,6 @@ void main() {
     //     sample_scanline_new(vec3(param.H1, 0.6, 0.3), vec3(param.H2, 0.0,
     //     0.5),
     //                         vec2(0.5), vTexCoord);
-    // // Cross through middle
-    // if (abs(vTexCoord.x - 0.5) < 2.0 * param.OutputSize.z ||
-    //     abs(vTexCoord.y - 0.5) < 2.0 * param.OutputSize.w) {
-    //     FragColor.rgb = vec3(1.0) - FragColor.rgb;
-    // }
     // return;
 
     // Important coordinates
