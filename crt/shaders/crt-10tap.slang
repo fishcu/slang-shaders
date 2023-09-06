@@ -173,6 +173,7 @@ vec3 sample_scanline_new(vec3 signal_1, vec3 signal_2, vec2 signal_center,
                    (w2 * h2 - w1 * h1 + EPS);
     const vec3 ellipse_center_x =
         signal_center.x + x * sign(signal_2 - signal_1);
+    // const vec3 ellipse_center_x = vec3(signal_center.x);
 
     // Draw scanlines
     vec3 result;
@@ -215,31 +216,70 @@ vec3 sample_scanline_new(vec3 signal_1, vec3 signal_2, vec2 signal_center,
     return result;
 }
 
+vec3 get_blended_value(vec3 samples[5], float x, float x_center) {
+    vec3 signal = vec3(0.0);
+    float g_sum = 0.0;
+    for (float offset = -2.0; offset <= 2.0; offset += 1.0) {
+        const float dx = (x + offset) - x_center;
+        const float w =
+            exp(-dx * dx / (param.H_BLUR * param.H_BLUR * 0.25 + EPS));
+        g_sum += w;
+        signal += w * samples[clamp(int(-x - offset + 3.0), 0, 4)];
+    }
+    // if (g_sum < 1.0e-6) {
+    //     return samples[clamp(int(x + 2.0), 0, 4)];
+    // }
+    return signal / g_sum;
+}
+
 void main() {
     // FragColor.rgb = to_lin(texture(Original, vTexCoord).rgb);
     // FragColor[3] = 1.0;
     // return
 
-    const float m = param.OutputSize.w * param.AA_STRENGTH * 100;
+    // const float m = param.OutputSize.w * param.AA_STRENGTH * 100;
 
     // const vec2 axes = vec2(0.4, 0.3);
-    // const vec2 center = vec2(0.5 + 0.785 * axes[0], 0.5);
+    // const vec2 center = vec2(0.5 + 0.0 * 0.785 * axes[0], 0.5);
 
     // const float fx = f(vTexCoord, center, axes);
     // const vec2 gradfx = gradf(vTexCoord, center, axes);
     // // const vec2 gradfx = vec2(dFdx(fx), dFdy(fx)) / m;
-
     // float dist = fx / length(gradfx);
 
-    // // Sanity check gradient
-    // if (vTexCoord.x < 0.3) {
-    //     dist = abs(vTexCoord.y - 0.5) - 0.2;
-    // }
+    // // // Sanity check gradient
+    // // if (vTexCoord.x < 0.3) {
+    // //     dist = abs(vTexCoord.y - 0.5) - 0.2;
+    // // }
 
     // // Draw shapes
-    // FragColor = vec4(1.0 - smoothstep(-0.5 * m, 0.5 * m, dist), 0.0, 0.0, 1.0);
+    // FragColor = vec4(1.0 - smoothstep(-0.5 * m, 0.5 * m, dist), 0.0,
+    // 0.0, 1.0);
 
-    // // Cross through middle
+    // // MSAA ellipse
+    // FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    // const vec2 start =
+    //     (floor(vTexCoord * param.OutputSize.xy) + 0.5) * param.OutputSize.zw;
+
+    // const vec2 d3d_msaa_pattern[] = {{1, 1},   {-1, -3}, {-3, 2},  {4, -1},
+    //                                  {-5, -2}, {2, 5},   {5, 3},   {3, -5},
+    //                                  {-2, 6},  {0, -7},  {-4, -6}, {-6, 4},
+    //                                  {-8, 0},  {7, -4},  {6, 7},   {-7, -8}};
+
+    // float coverage = 0.0;
+    // float max_coverage = 0.0;
+    // for (int i = 0; i < 16; ++i) {
+    //     const vec2 offset = d3d_msaa_pattern[i] / 16.0;
+    //     const vec2 coord = start + offset * param.OutputSize.zw *
+    //     param.AA_STRENGTH * 10; const float w = 1.0 - dot(offset, offset);
+    //     max_coverage += w;
+
+    //     const vec2 delta = (coord - center) / (axes + EPS);
+    //     coverage += w * (1.0 - step(1.0, dot(delta, delta)));
+    // }
+    // FragColor.r = coverage / max_coverage;
+
+    // Cross through middle
     // if (abs(vTexCoord.x - 0.5) < param.OutputSize.z ||
     //     abs(vTexCoord.y - 0.5) < param.OutputSize.w) {
     //     FragColor.rgb = vec3(1.0) - FragColor.rgb;
@@ -270,62 +310,42 @@ void main() {
     // const float coeffs[] = get_gaussian();
 
     // Sample nearest scanline
-    // vec3 samples[] = {
-    //     to_lin(
-    //         texture(Source, param.OriginalSize.zw * (tx_coord - vec2(2.0,
-    //         0.0)))
-    //             .rgb) *
-    //         param.MAX_THICK,
-    //     to_lin(
-    //         texture(Source, param.OriginalSize.zw * (tx_coord - vec2(1.0,
-    //         0.0)))
-    //             .rgb) *
-    //         param.MAX_THICK,
-    //     to_lin(texture(Source, param.OriginalSize.zw * (tx_coord)).rgb) *
-    //         param.MAX_THICK,
-    //     to_lin(
-    //         texture(Source, param.OriginalSize.zw * (tx_coord + vec2(1.0,
-    //         0.0)))
-    //             .rgb) *
-    //         param.MAX_THICK,
-    //     to_lin(
-    //         texture(Source, param.OriginalSize.zw * (tx_coord + vec2(2.0,
-    //         0.0)))
-    //             .rgb) *
-    //         param.MAX_THICK};
-
-    // vec3 signal = vec3(0.0);
-    // float g_sum = 0.0;
-    // for (float x = -param.H_BLUR * 0.5 * 1.5; x <= param.H_BLUR * 0.5 * 1.5;
-    //      x += param.OutputSize.z * param.OriginalSize.x) {
-    //     const float coeff =
-    //         exp(-x * x / (param.H_BLUR * param.H_BLUR * 0.25 + 1.e-10));
-    //     // const float xt =
-    //     //     (x + param.H_BLUR * 0.5 * 1.5) / (param.H_BLUR * 1.5) * 5.0;
-    //     // const float coeff = coeffs[int(clamp(xt, 0.0, 4.0))];
-    //     g_sum += coeff;
-    //     signal +=
-    //         coeff * samples[int(clamp(x + 2.0 + fract(tx_coord.x),
-    //         0.0, 4.0))];
-    // }
-    // signal /= g_sum;
+    vec3 samples[] = {
+        to_lin(
+            texture(Source, param.OriginalSize.zw * (tx_coord - vec2(2.0, 0.0)))
+                .rgb) *
+            param.MAX_THICK,
+        to_lin(
+            texture(Source, param.OriginalSize.zw * (tx_coord - vec2(1.0, 0.0)))
+                .rgb) *
+            param.MAX_THICK,
+        to_lin(texture(Source, param.OriginalSize.zw * (tx_coord)).rgb) *
+            param.MAX_THICK,
+        to_lin(
+            texture(Source, param.OriginalSize.zw * (tx_coord + vec2(1.0, 0.0)))
+                .rgb) *
+            param.MAX_THICK,
+        to_lin(
+            texture(Source, param.OriginalSize.zw * (tx_coord + vec2(2.0, 0.0)))
+                .rgb) *
+            param.MAX_THICK};
 
     // const vec3 signal =
     //     to_lin(texture(Source, param.OriginalSize.zw * (tx_coord)).rgb) *
     //     param.MAX_THICK;
 
     // const float scanline_center = floor(tx_coord.y) + 0.5;
-    // FragColor.rgb =
-    //     sample_scanline(signal, scanline_center, px_upper, px_lower);
+    // FragColor.rgb = sample_scanline(
+    //     get_blended_value(samples, fract(tx_coord.x), 0.5) * param.MAX_THICK,
+    //     scanline_center, px_upper, px_lower);
 
     const vec3 signal_1 =
-        to_lin(texture(Source, vTexCoord).rgb) * param.MAX_THICK;
+        get_blended_value(samples, fract(tx_coord.x), 0.5) * param.MAX_THICK;
+    const float second_nearest_offset = fract(tx_coord.x) < 0.5 ? 1.0 : -1.0;
     const vec3 signal_2 =
-        to_lin(texture(Source, vec2(fract(tx_coord.x) < 0.5
-                                        ? vTexCoord.x - param.OriginalSize.z
-                                        : vTexCoord.x + param.OriginalSize.z,
-                                    vTexCoord.y))
-                   .rgb) *
+        get_blended_value(samples,
+                          second_nearest_offset + 1.0 - fract(tx_coord.x),
+                          second_nearest_offset + 0.5) *
         param.MAX_THICK;
     const vec2 signal_center =
         vec2(fract(tx_coord.x) < 0.5 ? floor(tx_coord.x) : ceil(tx_coord.x),
