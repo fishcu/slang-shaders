@@ -1,7 +1,7 @@
 #version 450
 
 /*
-    crt-10tap v1.0 by fishku
+    Brightness-Optimized SDR Scanlines v1.0 by fishku
     Copyright (C) 2023
     Public domain license (CC0)
 
