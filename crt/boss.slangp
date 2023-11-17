@@ -1,11 +1,6 @@
 shaders = 1
 
-shader0 = shaders/boss/boss_1.slang
+shader0 = shaders/boss/boss.slang
 filter_linear0 = false
-scale_type0 = source
+scale_type0 = viewport
 scale0 = 1.0
-
-shader1 = shaders/boss/boss_2.slang
-filter_linear1 = false
-scale_type1 = viewport
-scale1 = 1.0
