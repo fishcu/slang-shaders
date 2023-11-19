@@ -76,7 +76,7 @@ float line_seg_sdf(in vec2 p, in vec2 q, in vec2 x) {
     vec2 xp = x - p;
     vec2 e = q - p;
     float h = clamp(dot(xp, e) / dot(e, e), 0.0, 1.0);
-    float d = length(p - e * h);
+    float d = length(xp - e * h);
     float s = 1.0;
     // even-odd rule
     if ((xp.x > 0.0) != (xp.x > e.x)) {
@@ -140,18 +140,25 @@ float circle_arc_sdf(vec2 p, vec2 q, vec2 t, vec2 x) {
 }
 
 float biarc_sdf(vec2 p, vec2 q, vec2 t0, vec2 t1, vec2 x) {
-    t0 = t0 / length(t0);
-    t1 = t1 / length(t1);
+    t0 /= length(t0);
+    t1 /= length(t1);
+
+    // if (x.x > 0.5) {
+    //     FragColor.a = 1.0;
+    //     FragColor.b = 1.0;
+    // }
 
     // chord given by points on circle
     vec2 d = p - q;
     // vector along which center must lie
     vec2 n = perp(d);
     float denom = dot(n, t0 - t1);
-    vec2 t;
-    if (denom < 1.0e-5) {
+    vec2 j;
+    if (abs(denom) < 1.0e-6) {
         // Both tangent vectors are the same.
-        t = 0.5 * (p + q);
+        j = 0.5 * (p + q);
+        // FragColor.a = 1.0;
+        // FragColor.r = 1.0;
     } else {
         // center of circle describing locus of joint points
         vec2 c = 0.5 * ((p + q) + dot(d, t0 + t1) / denom * n);
@@ -163,12 +170,40 @@ float biarc_sdf(vec2 p, vec2 q, vec2 t0, vec2 t1, vec2 x) {
         // Joint point is chosen as intersection of chord bisector with circle.
         // The closer one is chosen, which gives good results for the tangents
         // we care about.
-        t = c + sign(cro(pc, d)) * sqrt(r2) * n / length(n);
+        j = c + sign(cro(pc, d)) * sqrt(r2) * n / length(n);
     }
 
+    // if (distance(x, vec2(0.0)) < 0.03) {
+    //     FragColor.a = 1.0;
+    //     FragColor.b = 1.0;
+    // }
+
+    // if (distance(x, j) < 0.02) {
+    //     FragColor.a = 1.0;
+    //     FragColor.b = 1.0;
+    // }
+
+    // if (distance(x, p) < 0.03) {
+    //     FragColor.a = 1.0;
+    //     FragColor.r = 1.0;
+    // }
+    // if (distance(x, q) < 0.03) {
+    //     FragColor.a = 1.0;
+    //     FragColor.g = 1.0;
+    // }
+
+    // if (abs(line_seg_sdf(p, p + t0 * 0.9, x)) < 0.01) {
+    //     FragColor.a = 1.0;
+    //     FragColor.r = 1.0;
+    // }
+    // if (abs(line_seg_sdf(q, q - t1 * 0.9, x)) < 0.01) {
+    //     FragColor.a = 1.0;
+    //     FragColor.g = 1.0;
+    // }
+
     // Find arcs and evaluate SDF in one go
-    float sd1 = circle_arc_sdf(p, t, t0, x);
-    float sd2 = circle_arc_sdf(q, t, -t1, x);
+    float sd1 = circle_arc_sdf(p, j, t0, x);
+    float sd2 = circle_arc_sdf(q, j, -t1, x);
     float sd = min(abs(sd1), abs(sd2));
     float s = sign(sd1 * sd2);
 
@@ -176,10 +211,10 @@ float biarc_sdf(vec2 p, vec2 q, vec2 t0, vec2 t1, vec2 x) {
 }
 
 float get_slope(float l, float c, float r) {
-    if ((c - l) * (r - c) < 0.0) {
-        // inflection
-        return 0.0;
-    }
+    // if ((c - l) * (r - c) < -1.e-2) {
+    //     // inflection
+    //     return 0.0;
+    // }
     return 0.5 * (r - l);
 }
 
@@ -200,28 +235,80 @@ void main() {
     // const float scanline_center = floor(tx_coord.y) + param.SUBPX_POS;
 
     const vec3 smp[] = {
-        0.5 * to_lin(texture(Source,
-                       (itx_coord + vec2(-1.5, 0.5)) * param.OriginalSize.zw)
-                   .rgb),
-        0.5 * to_lin(texture(Source,
-                       (itx_coord + vec2(-0.5, 0.5)) * param.OriginalSize.zw)
-                   .rgb),
-        0.5 * to_lin(texture(Source,
-                       (itx_coord + vec2(0.5, 0.5)) * param.OriginalSize.zw)
-                   .rgb),
-        0.5 * to_lin(texture(Source,
-                       (itx_coord + vec2(1.5, 0.5)) * param.OriginalSize.zw)
-                   .rgb),
-        0.5 * to_lin(texture(Source,
-                       (itx_coord + vec2(2.5, 0.5)) * param.OriginalSize.zw)
-                   .rgb)};
+        0.4 * to_lin(texture(Source, (itx_coord + vec2(-1.5, 0.5)) *
+                                         param.OriginalSize.zw)
+                         .rgb),
+        0.4 * to_lin(texture(Source, (itx_coord + vec2(-0.5, 0.5)) *
+                                         param.OriginalSize.zw)
+                         .rgb),
+        0.4 * to_lin(texture(Source, (itx_coord + vec2(0.5, 0.5)) *
+                                         param.OriginalSize.zw)
+                         .rgb),
+        0.4 * to_lin(texture(Source, (itx_coord + vec2(1.5, 0.5)) *
+                                         param.OriginalSize.zw)
+                         .rgb),
+        0.4 * to_lin(texture(Source, (itx_coord + vec2(2.5, 0.5)) *
+                                         param.OriginalSize.zw)
+                         .rgb)};
     const vec3 slopes[] = {get_slope(smp[0], smp[1], smp[2]),
                            get_slope(smp[1], smp[2], smp[3]),
                            get_slope(smp[2], smp[3], smp[4])};
 
+    // Debug
+    FragColor = vec4(0.0);
+    
+    // if (ftx_coord.x < 0.01) {
+    //     FragColor.a = 1.0;
+    //     FragColor.rgb = vec3(1.0);
+    // }
+
+
+    // values
+    // ftx_coord.y = 0.5 - ftx_coord.y;
+    // if (ftx_coord.x < 0.16 && abs(ftx_coord.y - smp[0][0]) < 0.01) {
+    //     FragColor.a = 1.0;
+    //     FragColor.g = 1.0;
+    // }
+    // if (ftx_coord.x < 0.33 && abs(ftx_coord.y - smp[1][0]) < 0.01) {
+    //     FragColor.a = 1.0;
+    //     FragColor.r = 1.0;
+    // }
+    // if (ftx_coord.x >= 0.33 && ftx_coord.x < 0.66 &&
+    //     abs(ftx_coord.y - smp[2][0]) < 0.01) {
+    //     FragColor.a = 1.0;
+    //     FragColor.g = 1.0;
+    // }
+    // if (ftx_coord.x >= 0.66 && abs(ftx_coord.y - smp[3][0]) < 0.01) {
+    //     FragColor.a = 1.0;
+    //     FragColor.b = 1.0;
+    // }
+    // if (ftx_coord.x >= 0.86 && abs(ftx_coord.y - smp[4][0]) < 0.01) {
+    //     FragColor.a = 1.0;
+    //     FragColor.r = 1.0;
+    // }
+    // ftx_coord.y = 0.5 - ftx_coord.y;
+
+    // slopes
+    // ftx_coord.y = 1.0 - ftx_coord.y;
+    // if (ftx_coord.x < 0.33 && abs(ftx_coord.y - 0.5 - slopes[0][0]) < 0.01) {
+    //     FragColor.a = 1.0;
+    //     FragColor.r = 1.0;
+    // }
+    // if (ftx_coord.x >= 0.33 && ftx_coord.x < 0.66 &&
+    //     abs(ftx_coord.y - 0.5 - slopes[1][0]) < 0.01) {
+    //     FragColor.a = 1.0;
+    //     FragColor.g = 1.0;
+    // }
+    // if (ftx_coord.x >= 0.66 && abs(ftx_coord.y - 0.5 - slopes[2][0]) < 0.01) {
+    //     FragColor.a = 1.0;
+    //     FragColor.b = 1.0;
+    // }
+    // ftx_coord.y = 1.0 - ftx_coord.y;
+
     // Evaluate two biarcs that are closest to current pixel
     // TODO vectorize
     ftx_coord.y = abs(ftx_coord.y - 0.5);
+    // ftx_coord.y -= 0.3;
     vec2 tx_per_px = param.OutputSize.zw * param.OriginalSize.xy;
     for (int i = 0; i < 3; ++i) {
         float sd1 = biarc_sdf(vec2(-0.5, smp[1][i]),    //
@@ -246,10 +333,13 @@ void main() {
         float s = sign(sd1 * sd2);
 
         sd = sd * s;
-        // sd = sd1;
+        // float sd = sd1;
 
-        FragColor[i] = 1.0 - smoothstep(-tx_per_px.x * 0.5, tx_per_px.x * 0.5, sd);
-        // FragColor[i] = 1.0 - step(0.0, sd);
+        if (FragColor.a == 0.0) {
+            FragColor[i] =
+                1.0 - smoothstep(-tx_per_px.x * 0.5, tx_per_px.x * 0.5, sd);
+            // FragColor[i] = 1.0 - step(0.0, sd);
+        }
     }
 
     FragColor.rgb = to_srgb(FragColor.rgb);
