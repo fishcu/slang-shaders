@@ -28,6 +28,8 @@
 // #pragma parameter ELLIPSE_W "Ellipse width" 1.0 0.0 3.0 0.05
 // clang-format on
 
+#define NUMERICAL_FUDGE 1.e-5
+
 layout(push_constant) uniform Push {
     vec4 OriginalSize;
     vec4 SourceSize;
@@ -202,10 +204,16 @@ float biarc_sdf(vec2 p, vec2 q, vec2 t0, vec2 t1, vec2 x) {
     // }
 
     // Find arcs and evaluate SDF in one go
-    float sd1 = circle_arc_sdf(p, j, t0, x);
-    float sd2 = circle_arc_sdf(q, j, -t1, x);
+    float sd1 = circle_arc_sdf(p, j + vec2(NUMERICAL_FUDGE, 0.0), t0, x);
+    float sd2 = circle_arc_sdf(q, j - vec2(NUMERICAL_FUDGE, 0.0), -t1, x);
     float sd = min(abs(sd1), abs(sd2));
     float s = sign(sd1 * sd2);
+
+    // There should not be any frags inside both shapes.
+    // This accounts for numerical fudging of borders.
+    if (sd1 < 0.0 && sd2 < 0.0) {
+        s = -1.0;
+    }
 
     return sd * s;
 }
@@ -256,12 +264,11 @@ void main() {
 
     // Debug
     FragColor = vec4(0.0);
-    
+
     // if (ftx_coord.x < 0.01) {
     //     FragColor.a = 1.0;
     //     FragColor.rgb = vec3(1.0);
     // }
-
 
     // values
     // ftx_coord.y = 0.5 - ftx_coord.y;
@@ -299,7 +306,8 @@ void main() {
     //     FragColor.a = 1.0;
     //     FragColor.g = 1.0;
     // }
-    // if (ftx_coord.x >= 0.66 && abs(ftx_coord.y - 0.5 - slopes[2][0]) < 0.01) {
+    // if (ftx_coord.x >= 0.66 && abs(ftx_coord.y - 0.5 - slopes[2][0]) < 0.01)
+    // {
     //     FragColor.a = 1.0;
     //     FragColor.b = 1.0;
     // }
@@ -311,16 +319,16 @@ void main() {
     // ftx_coord.y -= 0.3;
     vec2 tx_per_px = param.OutputSize.zw * param.OriginalSize.xy;
     for (int i = 0; i < 3; ++i) {
-        float sd1 = biarc_sdf(vec2(-0.5, smp[1][i]),    //
-                              vec2(0.5, smp[2][i]),     //
-                              vec2(1.0, slopes[0][i]),  //
-                              vec2(1.0, slopes[1][i]),  //
+        float sd1 = biarc_sdf(vec2(-0.5 - NUMERICAL_FUDGE, smp[1][i]),  //
+                              vec2(0.5 + NUMERICAL_FUDGE, smp[2][i]),   //
+                              vec2(1.0, slopes[0][i]),                  //
+                              vec2(1.0, slopes[1][i]),                  //
                               ftx_coord);
 
-        float sd2 = biarc_sdf(vec2(0.5, smp[2][i]),     //
-                              vec2(1.5, smp[3][i]),     //
-                              vec2(1.0, slopes[1][i]),  //
-                              vec2(1.0, slopes[2][i]),  //
+        float sd2 = biarc_sdf(vec2(0.5 - NUMERICAL_FUDGE, smp[2][i]),  //
+                              vec2(1.5 + NUMERICAL_FUDGE, smp[3][i]),  //
+                              vec2(1.0, slopes[1][i]),                 //
+                              vec2(1.0, slopes[2][i]),                 //
                               ftx_coord);
 
         // float sd1 = line_seg_sdf(vec2(-0.5, smp[1][i]), vec2(0.5, smp[2][i]),
@@ -329,15 +337,18 @@ void main() {
         //     line_seg_sdf(vec2(0.5, smp[2][i]), vec2(1.5, smp[3][i]),
         //     ftx_coord);
 
-        float sd = min(abs(sd1), abs(sd2));
+        float d = min(abs(sd1), abs(sd2));
         float s = sign(sd1 * sd2);
+        // There should not be any frags inside both shapes.
+        // This accounts for numerical fudging of borders.
+        if (sd1 < 0.0 && sd2 < 0.0) {
+            s = -1.0;
+        }
 
-        sd = sd * s;
-        // float sd = sd1;
-
+        const float aa_thickness = tx_per_px.x * param.AA_STRENGTH;
         if (FragColor.a == 0.0) {
-            FragColor[i] =
-                1.0 - smoothstep(-tx_per_px.x * 0.5, tx_per_px.x * 0.5, sd);
+            FragColor[i] = 1.0 - smoothstep(-0.5 * aa_thickness,
+                                            0.5 * aa_thickness, s * d);
             // FragColor[i] = 1.0 - step(0.0, sd);
         }
     }
