@@ -28,7 +28,7 @@
 // #pragma parameter ELLIPSE_W "Ellipse width" 1.0 0.0 3.0 0.05
 // clang-format on
 
-#define NUMERICAL_FUDGE 1.e-5
+#define NUMERICAL_FUDGE 1.e-3
 
 layout(push_constant) uniform Push {
     vec4 OriginalSize;
