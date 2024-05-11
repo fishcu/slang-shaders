@@ -35,21 +35,42 @@ const float bayer_4x4[16] = float[](
 );
 
 // 8x8 Bayer matrix
+// const float bayer_8x8[64] = float[](
+//      0.0/64.0, 32.0/64.0,  8.0/64.0, 40.0/64.0,  2.0/64.0, 34.0/64.0, 10.0/64.0, 42.0/64.0,
+//     48.0/64.0, 16.0/64.0, 56.0/64.0, 24.0/64.0, 50.0/64.0, 18.0/64.0, 58.0/64.0, 26.0/64.0,
+//     12.0/64.0, 44.0/64.0,  4.0/64.0, 36.0/64.0, 14.0/64.0, 46.0/64.0,  6.0/64.0, 38.0/64.0,
+//     60.0/64.0, 28.0/64.0, 52.0/64.0, 20.0/64.0, 62.0/64.0, 30.0/64.0, 54.0/64.0, 22.0/64.0,
+//      3.0/64.0, 35.0/64.0, 11.0/64.0, 43.0/64.0,  1.0/64.0, 33.0/64.0,  9.0/64.0, 41.0/64.0,
+//     51.0/64.0, 19.0/64.0, 59.0/64.0, 27.0/64.0, 49.0/64.0, 17.0/64.0, 57.0/64.0, 25.0/64.0,
+//     15.0/64.0, 47.0/64.0,  7.0/64.0, 39.0/64.0, 13.0/64.0, 45.0/64.0,  5.0/64.0, 37.0/64.0,
+//     63.0/64.0, 31.0/64.0, 55.0/64.0, 23.0/64.0, 61.0/64.0, 29.0/64.0, 53.0/64.0, 21.0/64.0
+// );
 const float bayer_8x8[64] = float[](
      0.0/64.0, 32.0/64.0,  8.0/64.0, 40.0/64.0,  2.0/64.0, 34.0/64.0, 10.0/64.0, 42.0/64.0,
     48.0/64.0, 16.0/64.0, 56.0/64.0, 24.0/64.0, 50.0/64.0, 18.0/64.0, 58.0/64.0, 26.0/64.0,
-    12.0/64.0, 44.0/64.0,  4.0/64.0, 36.0/64.0, 14.0/64.0, 46.0/64.0,  6.0/64.0, 38.0/64.0,
-    60.0/64.0, 28.0/64.0, 52.0/64.0, 20.0/64.0, 62.0/64.0, 30.0/64.0, 54.0/64.0, 22.0/64.0,
+    38.0/64.0, 12.0/64.0, 44.0/64.0,  4.0/64.0, 36.0/64.0, 14.0/64.0, 46.0/64.0,  6.0/64.0, //38.0/64.0,
+    22.0/64.0, 60.0/64.0, 28.0/64.0, 52.0/64.0, 20.0/64.0, 62.0/64.0, 30.0/64.0, 54.0/64.0, //22.0/64.0,
      3.0/64.0, 35.0/64.0, 11.0/64.0, 43.0/64.0,  1.0/64.0, 33.0/64.0,  9.0/64.0, 41.0/64.0,
     51.0/64.0, 19.0/64.0, 59.0/64.0, 27.0/64.0, 49.0/64.0, 17.0/64.0, 57.0/64.0, 25.0/64.0,
-    15.0/64.0, 47.0/64.0,  7.0/64.0, 39.0/64.0, 13.0/64.0, 45.0/64.0,  5.0/64.0, 37.0/64.0,
-    63.0/64.0, 31.0/64.0, 55.0/64.0, 23.0/64.0, 61.0/64.0, 29.0/64.0, 53.0/64.0, 21.0/64.0
+    37.0/64.0, 15.0/64.0, 47.0/64.0,  7.0/64.0, 39.0/64.0, 13.0/64.0, 45.0/64.0,  5.0/64.0, //37.0/64.0,
+    21.0/64.0, 63.0/64.0, 31.0/64.0, 55.0/64.0, 23.0/64.0, 61.0/64.0, 29.0/64.0, 53.0/64.0 //21.0/64.0
 );
 // clang-format on
 
 float dither(float luma, float dither, float strength) {
     float offset_luma = luma + (dither - 0.5) * 0.25 * strength;
     return clamp(floor(offset_luma * 4.0) / 3.0, 0.0, 1.0);
+}
+
+float dither_r2(float luma, vec2 tx_coord, float strength) {
+    // Magic numbers are explained here:
+    // https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
+    // Numerically improved constants from here:
+    // https://www.shadertoy.com/view/mts3zN
+    const vec2 alpha = vec2(0.245122333753, 0.4301597090025);
+    float z = fract(dot(alpha, tx_coord));
+    z = 1.0 - 2.0 * abs(z - 0.5);
+    return dither(luma, z, strength);
 }
 
 float dither_bayer_4x4(float luma, vec2 tx_coord, float strength) {
@@ -60,9 +81,48 @@ float dither_bayer_4x4(float luma, vec2 tx_coord, float strength) {
     return dither(luma, bayer, strength);
 }
 
-float dither_bayer_8x8(float luma, vec2 tx_coord, float strength) {
-    int x = int(tx_coord.x) % 8;
-    int y = int(tx_coord.y) % 8;
+float dither_bayer_8x8(float luma, vec2 tx_coord, float strength, uint frame) {
+    int x = int(tx_coord.x);
+    int y = int(tx_coord.y);
+
+    // Rotate indices for lols
+    // int x = int(tx_coord.x);
+    // int y = int(tx_coord.y);
+    // Shift center of rotation
+    // x -= 3;
+    // y -= 3;
+    // Determine angle
+    float angle = fract(float(frame) * 0.000);
+    // const float alpha_1 = 0.81917251339;
+    // const float alpha_2 = 0.6710436067;
+    // const float alpha_3 = 0.5497004779;
+    // float angle = fract(alpha_1 * tx_coord.x / 10000.0 +
+    //                     alpha_2 * tx_coord.y / 10000.0 + alpha_3 * luma * 123.0);
+    // angle = 1.0 - 2.0 * abs(angle - 0.5);
+    // float angle = fract(luma / 2.0);
+    // If outside range of -90 to 90 degrees, flip
+    if (angle > 0.5) {
+        x = -x;
+        y = -y;
+        angle -= 0.5;
+    }
+    // Convert to rads and shift by -90 degrees
+    angle = (angle - 0.25) * 2.0 * 3.14159265;
+    float t = -tan(angle / 2.0);
+    float s = sin(angle);
+    // Apply 3 shears for actual rotation
+    x += int(round(t * y));
+    y += int(round(s * x));
+    x += int(round(t * y));
+    // Shift center back
+    // x += 3;
+    // y += 3;
+    // Normalize indices
+    x = (x + 8 * 1000) % 8;
+    y = (y + 8 * 1000) % 8;
+
+    // return dither_r2(luma, vec2(float(x), float(y)), strength);
+
     int index = y * 8 + x;
     float bayer = bayer_8x8[index];
     return dither(luma, bayer, strength);
@@ -84,17 +144,6 @@ float dither_bayer_4x8x2(float luma, vec2 tx_coord, int frame, float strength) {
     int index = x + y * 8 + t * 32;
     float bayer = bayer_8x8[index];
     return dither(luma, bayer, strength);
-}
-
-float dither_r2(float luma, vec2 tx_coord, float strength) {
-    // Magic numbers are explained here:
-    // https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
-    // Numerically improved constants from here:
-    // https://www.shadertoy.com/view/mts3zN
-    const vec2 alpha = vec2(0.245122333753, 0.4301597090025);
-    float z = fract(dot(alpha, tx_coord));
-    z = 1.0 - 2.0 * abs(z - 0.5);
-    return dither(luma, z, strength);
 }
 
 // float dither_r2_time(float luma, vec2 tx_coord, uint time, float strength) {
@@ -223,7 +272,8 @@ void main() {
             break;
         case 2:
             res = dither_bayer_8x8(res, vTexCoord * param.SourceSize.xy,
-                                   param.FCOL_DITHERING_STRENGTH);
+                                   param.FCOL_DITHERING_STRENGTH,
+                                   param.FrameCount);
             break;
         case 3:
             res = dither_bayer_2x4x2(res, vTexCoord * param.SourceSize.xy,
@@ -242,7 +292,8 @@ void main() {
         case 6:
             const float e = 2.71828182845904523536028747;
             vec2 noiseOff = vec2(12345.0 * fract(float(param.FrameCount) * e));
-            res = dither_hilbert_r1(res, vTexCoord * param.SourceSize.xy + noiseOff,
+            res = dither_hilbert_r1(res,
+                                    vTexCoord * param.SourceSize.xy + noiseOff,
                                     param.FCOL_DITHERING_STRENGTH);
             break;
     };
