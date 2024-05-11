@@ -60,12 +60,39 @@ layout(location = 0) out vec4 FragColor;
 layout(set = 0, binding = 2) uniform sampler2D Source;
 
 void main() {
-#if 0
+#if 1
     // Debug
-    vec3 res = pixel_color(px_rect, vec2(500.0), vec2(100.0));
-    res += pixel_color(px_rect, vec2(500.0), vec2(600.0, 100.0));
-    res += pixel_color(px_rect, vec2(500.0), vec2(100.0, 600.0));
-    res += pixel_color(px_rect, vec2(500.0), vec2(600.0));
+    // const vec4 px_rect_dbg =
+    //     vec4(tx_coord / param.SourceSize.xy * param.OutputSize.xy - 0.5 *
+    //     100.0,
+    //          tx_coord / param.SourceSize.xy * param.OutputSize.xy + 0.5 *
+    //          100.0);
+    // const vec2 px_size_dbg = vec2(500.0);
+    // const vec2 subpx_size_dbg =
+    //     px_size_dbg *
+    //     mix(subpx_ratio, vec2(2.0 / 3.0, 0.98), param.AUTH_GBC_BRIG);
+    // const float subpx_orig_y_dbg = (px_size_dbg.y - subpx_size_dbg.y) * 0.5;
+    // const vec2 notch_size_dbg =
+    //     px_size_dbg * mix(notch_ratio, vec2(0.0), param.AUTH_GBC_BRIG);
+
+    // vec3 res = pixel_color(px_rect_dbg, px_size_dbg, vec2(100.0),
+    //                        subpx_orig_y_dbg, subpx_size_dbg, notch_size_dbg)
+    //                        +
+    //            pixel_color(px_rect_dbg, px_size_dbg, vec2(600.0, 100.0),
+    //                        subpx_orig_y_dbg, subpx_size_dbg, notch_size_dbg)
+    //                        +
+    //            pixel_color(px_rect_dbg, px_size_dbg, vec2(100.0, 600.0),
+    //                        subpx_orig_y_dbg, subpx_size_dbg, notch_size_dbg)
+    //                        +
+    //            pixel_color(px_rect_dbg, px_size_dbg, vec2(600.0),
+    //                        subpx_orig_y_dbg, subpx_size_dbg, notch_size_dbg);
+
+    float radius = 500.0;
+    vec3 res =
+        vec3(circle_rectangle_overlap(
+                 vec4(100, 100, 300, 500),
+                 tx_coord / param.SourceSize.xy * param.OutputSize.xy, radius) /
+             (radius * radius * 3.15159265));
     FragColor = vec4(res, 1.0);
 #else
     // Figure out 4 nearest texels in source texture

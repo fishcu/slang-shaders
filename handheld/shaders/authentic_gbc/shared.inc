@@ -48,7 +48,7 @@ void auth_gbc_vert_shader(vec2 source_size, vec2 output_size,
     tx_coord = TexCoord * source_size;
     tx_to_px = output_size / source_size;
     subpx_size =
-        tx_to_px * mix(subpx_ratio, vec2(2.0 / 3.0, 1.0), overbrighten);
+        tx_to_px * mix(subpx_ratio, vec2(2.0 / 3.0, 0.95), overbrighten);
     notch_size = tx_to_px * mix(notch_ratio, vec2(0.0), overbrighten);
     subpx_orig_y = (tx_to_px.y - subpx_size.y) * 0.5;
 }
