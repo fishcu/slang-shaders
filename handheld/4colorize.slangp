@@ -1,5 +1,79 @@
-shaders = 1
+shaders = 9
 
-shader0 = shaders/4colorize/4colorize.slang
+shader0 = ../stock.slang
 filter_linear0 = false
 scale_type0 = source
+scale0 = 1.0
+alias0 = Input
+
+shader1 = shaders/4colorize/edges.slang
+filter_linear1 = true
+scale_type1 = source
+scale1 = 2.0
+wrap_mode1 = mirrored_repeat
+float_framebuffer1 = true
+
+shader2 = ../blurs/shaders/dual_filter/downsample.slang
+filter_linear2 = true
+scale_type2 = source
+scale2 = 0.5
+wrap_mode2 = mirrored_repeat
+float_framebuffer2 = true
+
+shader3 = ../blurs/shaders/dual_filter/downsample.slang
+filter_linear3 = true
+scale_type3 = source
+scale3 = 0.5
+wrap_mode3 = mirrored_repeat
+float_framebuffer3 = true
+
+shader4 = ../blurs/shaders/dual_filter/downsample.slang
+filter_linear4 = true
+scale_type4 = source
+scale4 = 0.5
+wrap_mode4 = mirrored_repeat
+float_framebuffer4 = true
+
+shader5 = ../blurs/shaders/dual_filter/upsample.slang
+filter_linear5 = true
+scale_type5 = source
+scale5 = 2.0
+wrap_mode5 = mirrored_repeat
+float_framebuffer5 = true
+shader6 = ../blurs/shaders/dual_filter/upsample.slang
+filter_linear6 = true
+scale_type6 = source
+scale6 = 2.0
+wrap_mode6 = mirrored_repeat
+float_framebuffer6 = true
+
+shader7 = ../blurs/shaders/dual_filter/upsample.slang
+filter_linear7 = true
+scale_type7 = source
+scale7 = 2.0
+wrap_mode7 = mirrored_repeat
+float_framebuffer7 = true
+
+shader8 = shaders/4colorize/4colorize.slang
+filter_linear8 = false
+scale_type8 = source
+scale8 = 0.5
+
+# shader4 = ../blurs/shaders/dual_filter/upsample.slang
+# filter_linear4 = true
+# scale_type4 = source
+# scale4 = 2.0
+# wrap_mode4 = mirrored_repeat
+# float_framebuffer4 = true
+# 
+# shader5 = ../blurs/shaders/dual_filter/upsample.slang
+# filter_linear5 = true
+# scale_type5 = source
+# scale5 = 2.0
+# wrap_mode5 = mirrored_repeat
+# float_framebuffer5 = true
+# 
+# shader6 = shaders/4colorize/4colorize.slang
+# filter_linear6 = false
+# scale_type6 = source
+# scale6 = 0.5
