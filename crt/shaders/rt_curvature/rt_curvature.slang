@@ -21,9 +21,6 @@
 // appending to other presets.
 #define SHARP_PIXEL_SAMPLING
 
-// If uncommented, mip-map levels are blended, if available, giving better AA.
-#define TRILINEAR_SAMPLING
-
 #include "../../../misc/shaders/input_transform/rotation.inc"
 #include "parameters.inc"
 #include "shared.inc"
@@ -33,6 +30,7 @@ layout(push_constant) uniform Push {
     vec4 SourceSize;
     vec4 OutputSize;
     uint Rotation;
+    uint FrameCount;
     float RT_CURV_ASPECT_H;
     float RT_CURV_ASPECT_V;
     float RT_CURV_SHAPE;
@@ -42,8 +40,8 @@ layout(push_constant) uniform Push {
     float RT_CURV_TILT_ANGLE_V;
     float RT_CURV_F;
     float RT_CURV_ROUNDED_CORNER;
-    float RT_CURV_LOD_BIAS;
-    float RT_CURV_APPEND;
+    float RT_CURV_ANISOTROPIC_LVL;
+    float RT_CURV_AA_STRENGTH;
 }
 param;
 
@@ -122,11 +120,75 @@ layout(location = 5) in vec2 input_aspect;
 layout(location = 0) out vec4 FragColor;
 layout(set = 0, binding = 2) uniform sampler2D Source;
 
+vec4 anisotropic_filtering(sampler2D tex, vec2 uv, float filtering_level,
+                           vec3 rng_seed) {
+    vec2 dx = dFdx(uv);
+    vec2 dy = dFdy(uv);
+    mat2 ellipse_approx = 2.0 * param.RT_CURV_AA_STRENGTH * mat2(dx, dy);
+
+    int num_samples = int(exp2(filtering_level));
+
+    float max_axis_sq = max(dot(dx, dx), dot(dy, dy));
+    float max_axis = sqrt(max_axis_sq);
+
+    float mip_level = max(0.5 * (log2(max_axis_sq * param.RT_CURV_AA_STRENGTH *
+                                      param.RT_CURV_AA_STRENGTH) -
+                                 filtering_level),
+                          0.0);
+    float mip_level_i;
+    float mip_level_f = modf(mip_level, mip_level_i);
+
+    vec4 color = vec4(0.0);
+    float total_weight = 0.0;
+
+    // Generate a random angle for this fragment
+    // hash function from: https://www.shadertoy.com/view/4djSRW
+    rng_seed = fract(rng_seed * .1031);
+    rng_seed += dot(rng_seed, rng_seed.zyx + 31.32);
+    float random_angle =
+        fract((rng_seed.x + rng_seed.y) * rng_seed.z) * 6.28318530718;  // 2*pi
+    mat2 rot = mat2(cos(random_angle), -sin(random_angle), sin(random_angle),
+                    cos(random_angle));
+
+    mat2 tf = ellipse_approx * rot;
+
+    // https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
+    const vec2 alpha = vec2(0.7548776662, 0.56984029);
+
+    for (int i = 0; i < num_samples; i++) {
+        // Generate rotated R2 sequence sample
+        vec2 offset = fract(float(i) * alpha) - 0.5;
+
+        // Calculate weight
+        // Simplified cubic pulse (assuming center=0, w=sqrt(2)/2)
+        float t = length(offset) * 1.41421;
+        float weight = 1.0 - t * t * (3.0 - 2.0 * t);
+
+        // Rotate and distort to ellipse
+        offset = tf * offset;
+
+        // Implement blending between mip-map levels in software because current
+        // implementation is broken. See:
+        // https://github.com/libretro/RetroArch/issues/16567;
+        color +=
+            mix(textureLod(tex, uv + offset, mip_level_i),
+                textureLod(tex, uv + offset, mip_level_i + 1.0), mip_level_f) *
+            weight;
+        total_weight += weight;
+    }
+
+    return color / total_weight;
+}
+
 void main() {
     vec2 uv = trace_ray(input_aspect, prim_ray_o, prim_ray_d, plane_n, plane_u,
                         plane_v, param.RT_CURV_CURVATURE, param.RT_CURV_SHAPE);
 
-    // Compute rounded corner darkening.
+    FragColor = anisotropic_filtering(
+        Source, uv, param.RT_CURV_ANISOTROPIC_LVL,
+        vec3(0.0));
+
+    // Apply rounded corner darkening.
     const vec2 q =
         input_aspect * (abs(uv - 0.5) - 0.5) + param.RT_CURV_ROUNDED_CORNER;
     const float rounded_rect_dist = min(max(q.x, q.y), 0.0) +
@@ -134,42 +196,5 @@ void main() {
                                     param.RT_CURV_ROUNDED_CORNER;
     const float corner_darkening = smoothstep(
         -max(param.OutputSize.z, param.OutputSize.w), 0.0, -rounded_rect_dist);
-
-    // Sampling section follows.
-#if defined(SHARP_PIXEL_SAMPLING) || defined(TRILINEAR_SAMPLING)
-    const vec2 d_uv_dx = dFdx(uv) * param.SourceSize.xy;
-    const vec2 d_uv_dy = dFdy(uv) * param.SourceSize.xy;
-#endif
-
-#ifdef SHARP_PIXEL_SAMPLING
-    if (param.RT_CURV_APPEND < 0.5) {
-        // Do a sharp "pixel art" sampling, following:
-        // https://www.youtube.com/watch?v=d6tp43wZqps
-        // Only apply pixel art sampling when not appending to avoid aliasing.
-        const vec2 box_size = clamp(abs(d_uv_dx) + abs(d_uv_dy), 1.0e-6, 1.0);
-        const vec2 tx = uv * param.SourceSize.xy - 0.5 * box_size;
-        const vec2 tx_offset = smoothstep(1 - box_size, vec2(1.0), fract(tx));
-        uv = (floor(tx) + 0.5 + tx_offset) * param.SourceSize.zw;
-    }
-#endif
-
-#ifdef TRILINEAR_SAMPLING
-    // Anisotropic trilinear filtering.
-    // Implement in software because current implementation is broken. See:
-    // https://github.com/libretro/RetroArch/issues/16567
-    const float lambda_base =
-        max(0.0,
-            0.5 * log2(max(dot(d_uv_dx, d_uv_dx), dot(d_uv_dy, d_uv_dy)))) +
-        param.RT_CURV_LOD_BIAS;
-    float lambda_i;
-    const float lambda_f = modf(lambda_base, lambda_i);
-    FragColor = vec4(mix(textureLod(Source, uv, lambda_i).rgb,
-                         textureLod(Source, uv, lambda_i + 1.0).rgb, lambda_f),
-                     1.0);
-#else
-    FragColor = vec4(textureLod(Source, uv, param.RT_CURV_LOD_BIAS).rgb, 1.0);
-#endif
-
-    // Apply rounded corner darkening.
     FragColor.rgb *= corner_darkening;
 }
