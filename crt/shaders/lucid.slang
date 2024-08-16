@@ -1,6 +1,7 @@
 #version 450
 
 #pragma parameter SUPERSAMPLING "Supersampling level" 4.0 0.0 8.0 0.1
+#pragma parameter ROT "Rotation" 0.0 0.0 3.141 0.1
 
 layout(push_constant) uniform Push {
     vec4 SourceSize;
@@ -8,6 +9,7 @@ layout(push_constant) uniform Push {
     vec4 OutputSize;
     uint FrameCount;
     float SUPERSAMPLING;
+    float ROT;
 }
 param;
 
@@ -29,45 +31,48 @@ layout(location = 0) in vec2 vTexCoord;
 layout(location = 0) out vec4 FragColor;
 layout(set = 0, binding = 2) uniform sampler2D Source;
 
+vec3 circle(vec2 x, vec2 c, float r) {
+    vec2 dx = x - c;
+    float d = sqrt(dot(dx, dx));
+    return vec3(smoothstep(-0.001, 0.001, r - d), 0.0, 0.0);
+}
+
+#define PI 3.14159265
+
 void main() {
     FragColor = vec4(vec3(0.0), 1.0);
-    int num_samples = int(exp2(filtering_level));
-    
-        // Generate a random angle for this fragment
-    // hash function from: https://www.shadertoy.com/view/4djSRW
-    rng_seed = fract(rng_seed * .1031);
-    rng_seed += dot(rng_seed, rng_seed.zyx + 31.32);
-    float random_angle =
-        fract((rng_seed.x + rng_seed.y) * rng_seed.z) * 6.28318530718;  // 2*pi
-    mat2 rot = mat2(cos(random_angle), -sin(random_angle), sin(random_angle),
-                    cos(random_angle));
 
-    mat2 tf = ellipse_approx * rot;
+    // Center of screen cross
+    if ((abs(vTexCoord.x - 0.5) < 0.1 && abs(vTexCoord.y - 0.5) < 0.001) ||
+        (abs(vTexCoord.x - 0.5) < 0.001 && abs(vTexCoord.y - 0.5) < 0.1)) {
+        FragColor.rgb = vec3(1.0);
+    }
+
+    float s = sin(param.ROT);
+    float c = cos(param.ROT);
+    mat2 rot = mat2(c, -s, s, c);
+    float enclosing_side = max(abs(c - s), abs(s + c));
 
     // https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
     const vec2 alpha = vec2(0.7548776662, 0.56984029);
 
-    for (int i = 0; i < num_samples; i++) {
-        // Generate rotated R2 sequence sample
-        vec2 offset = fract(float(i) * alpha) - 0.5;
+    int num_samples = int(exp2(param.SUPERSAMPLING));
+    for (int i = 0, num_samples_done = 0; num_samples_done < num_samples; ++i) {
+        vec2 offset = rot * (enclosing_side * (fract(float(i) * alpha + 0.5) - 0.5));
 
-        // Calculate weight
-        // Simplified cubic pulse (assuming center=0, w=sqrt(2)/2)
-        float t = length(offset) * 1.41421;
-        float weight = 1.0 - t * t * (3.0 - 2.0 * t);
+        // Rejection sampling
+        while (offset.x < -0.5 || offset.x > 0.5 || offset.y < -0.5 ||
+               offset.y > 0.5) {
+            ++i;
+            offset = rot * (enclosing_side * (fract(float(i) * alpha + 0.5) - 0.5));
+        }
 
-        // Rotate and distort to ellipse
-        offset = tf * offset;
+        // Center on screen
+        offset *= 0.5;
+        offset += 0.5;
 
-        // Implement blending between mip-map levels in software because current
-        // implementation is broken. See:
-        // https://github.com/libretro/RetroArch/issues/16567;
-        color +=
-            mix(textureLod(tex, uv + offset, mip_level_i),
-                textureLod(tex, uv + offset, mip_level_i + 1.0), mip_level_f) *
-            weight;
-        total_weight += weight;
+        FragColor.rgb = max(FragColor.rgb, circle(vTexCoord, offset, 0.01));
+
+        ++num_samples_done;
     }
-
-    return color / total_weight;
 }
