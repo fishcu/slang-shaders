@@ -61,9 +61,13 @@ void main() {
         FragColor.rgb = vec3(1.0);
     }
 
-    // vec3 rand = hash33(vec3(param.RNG1, param.RNG2, param.RNG3));
-    vec3 rand = hash33(vec3(vTexCoord * param.OutputSize.xy,
-                            param.ANIMATE * float(param.FrameCount % 8191)));
+    // Local texture space derivatives
+    // mat2 dist = mat2(dFdx(uv), dFdy(uv));
+    mat2 dist = mat2(vec2(0.9, 0.1), vec2(0.1, 0.9));
+
+    vec3 rand = hash33(vec3(param.RNG1, param.RNG2, param.RNG3));
+    // vec3 rand = hash33(vec3(vTexCoord * param.OutputSize.xy,
+    //                         param.ANIMATE * float(param.FrameCount % 8191)));
 
     rand.z *= 2.0 * PI;
     float s = sin(param.ROT + rand.z);
@@ -85,6 +89,9 @@ void main() {
             offset = scale * rot *
                      (fract(float(sample_count++) * alpha + rand.xy) - 0.5);
         }
+
+        // Apply distortion
+        offset = dist * offset;
 
         // Center on screen
         offset *= 0.5;

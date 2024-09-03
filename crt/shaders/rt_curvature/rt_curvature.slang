@@ -44,6 +44,10 @@ layout(push_constant) uniform Push {
     float RT_CURV_ROUNDED_CORNER;
     float RT_CURV_LOD_BIAS;
     float RT_CURV_APPEND;
+
+    uint FrameCount;
+    float SUPERSAMPLING;
+    float ANIMATE;
 }
 param;
 
@@ -59,6 +63,7 @@ layout(location = 2) out vec3 plane_n;
 layout(location = 3) out vec3 plane_u;
 layout(location = 4) out vec3 plane_v;
 layout(location = 5) out vec2 input_aspect;
+layout(location = 6) out vec2 vTexCoord;
 
 void main() {
     gl_Position = global.MVP * Position;
@@ -110,6 +115,8 @@ void main() {
                  plane_v, param.RT_CURV_CURVATURE, param.RT_CURV_F,
                  param.RT_CURV_SHAPE, param.RT_CURV_ZOOM, prim_ray_o,
                  prim_ray_d);
+
+    vTexCoord = TexCoord;
 }
 
 #pragma stage fragment
@@ -119,8 +126,18 @@ layout(location = 2) in vec3 plane_n;
 layout(location = 3) in vec3 plane_u;
 layout(location = 4) in vec3 plane_v;
 layout(location = 5) in vec2 input_aspect;
+layout(location = 6) in vec2 vTexCoord;
 layout(location = 0) out vec4 FragColor;
 layout(set = 0, binding = 2) uniform sampler2D Source;
+
+// https://www.shadertoy.com/view/4djSRW
+vec3 hash33(vec3 p3) {
+    p3 = fract(p3 * vec3(.1031, .1030, .0973));
+    p3 += dot(p3, p3.yxz + 33.33);
+    return fract((p3.xxy + p3.yxx) * p3.zyx);
+}
+
+#define PI 3.14159265
 
 void main() {
     vec2 uv = trace_ray(input_aspect, prim_ray_o, prim_ray_d, plane_n, plane_u,
@@ -136,6 +153,7 @@ void main() {
         -max(param.OutputSize.z, param.OutputSize.w), 0.0, -rounded_rect_dist);
 
     // Sampling section follows.
+    /*
 #if defined(SHARP_PIXEL_SAMPLING) || defined(TRILINEAR_SAMPLING)
     const vec2 d_uv_dx = dFdx(uv) * param.SourceSize.xy;
     const vec2 d_uv_dy = dFdy(uv) * param.SourceSize.xy;
@@ -169,6 +187,46 @@ void main() {
 #else
     FragColor = vec4(textureLod(Source, uv, param.RT_CURV_LOD_BIAS).rgb, 1.0);
 #endif
+    */
+
+    // Local texture space derivatives
+    mat2 dist = mat2(dFdx(uv), dFdy(uv));
+
+    // RNG
+    vec3 rand = hash33(vec3(vTexCoord * param.OutputSize.xy,
+                            param.ANIMATE * float(param.FrameCount % 8191)));
+
+    rand.z *= 2.0 * PI;
+    float s = sin(rand.z);
+    float c = cos(rand.z);
+    mat2 rot = mat2(c, -s, s, c);
+    float scale = max(abs(c - s), abs(s + c));
+
+    // https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
+    const vec2 alpha = vec2(0.7548776662, 0.56984029);
+
+    int num_samples = int(exp2(param.SUPERSAMPLING));
+    int sample_count = 0;
+    vec3 res = vec3(0.0);
+    for (int i = 0; i < num_samples; ++i) {
+        // Rejection sampling
+        vec2 offset = scale * rot *
+                      (fract(float(sample_count++) * alpha + rand.xy) - 0.5);
+        while (offset.x < -0.5 || offset.x > 0.5 || offset.y < -0.5 ||
+               offset.y > 0.5) {
+            offset = scale * rot *
+                     (fract(float(sample_count++) * alpha + rand.xy) - 0.5);
+        }
+
+        // Apply distortion
+        offset = dist * offset;
+
+        vec3 s = textureLod(Source, uv + offset, 0.0).rgb;
+        res += s * s;
+    }
+    FragColor = vec4(sqrt(res / float(num_samples)), 1.0);
+
+    // FragColor = vec4(textureLod(Source, uv, 0.0).rgb, 1.0);
 
     // Apply rounded corner darkening.
     FragColor.rgb *= corner_darkening;
