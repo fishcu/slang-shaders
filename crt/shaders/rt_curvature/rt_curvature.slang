@@ -137,6 +137,12 @@ vec3 hash33(vec3 p3) {
     return fract((p3.xxy + p3.yxx) * p3.zyx);
 }
 
+vec2 hash23(vec3 p3) {
+    p3 = fract(p3 * vec3(.1031, .1030, .0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.xx + p3.yz) * p3.zy);
+}
+
 #define PI 3.14159265
 
 void main() {
@@ -190,7 +196,7 @@ void main() {
     */
 
     // Local texture space derivatives
-    mat2 dist = mat2(dFdx(uv), dFdy(uv));
+    mat2 dist = mat2(dFdx(uv), dFdy(uv)) * 1.0;
 
     // RNG
     vec3 rand = hash33(vec3(vTexCoord * param.OutputSize.xy,
@@ -209,14 +215,42 @@ void main() {
     int sample_count = 0;
     vec3 res = vec3(0.0);
     for (int i = 0; i < num_samples; ++i) {
-        // Rejection sampling
-        vec2 offset = scale * rot *
-                      (fract(float(sample_count++) * alpha + rand.xy) - 0.5);
-        while (offset.x < -0.5 || offset.x > 0.5 || offset.y < -0.5 ||
-               offset.y > 0.5) {
-            offset = scale * rot *
-                     (fract(float(sample_count++) * alpha + rand.xy) - 0.5);
+        // // Rejection sampling
+        // vec2 offset = scale * rot *
+        //               (fract(float(sample_count++) * alpha + rand.xy) - 0.5);
+        // while (offset.x < -0.5 || offset.x > 0.5 || offset.y < -0.5 ||
+        //        offset.y > 0.5) {
+        //     offset = scale * rot *
+        //              (fract(float(sample_count++) * alpha + rand.xy) - 0.5);
+        // }
+        // // offset *= 1.1;
+
+        // Rejection sampling for circle
+        vec2 offset = (fract(float(sample_count++) * alpha + rand.xy) - 0.5);
+        while (dot(offset, offset) > 0.25) {
+            offset = (fract(float(sample_count++) * alpha + rand.xy) - 0.5);
         }
+        offset *= 2.0;
+        // Apply rotation
+        offset = rot * offset;
+
+        // // "polar coordinate transform" => VERY similar to rejection sampling
+        // for circle vec2 offset = fract(float(sample_count++) * alpha +
+        // rand.xy); vec2 polar = vec2(sqrt(offset.x), 2 * PI * offset.y);
+        // offset = polar.x * vec2(cos(polar.y), sin(polar.y));
+        // offset /= sqrt(2.0);
+        // // Apply rotation
+        // offset = rot * offset;
+
+        // // Box-Muller transform
+        // // vec2 offset = fract(float(sample_count++) * alpha + rand.xy);
+        // vec2 offset = hash23(vec3(
+        //     vTexCoord * param.OutputSize.xy,
+        //     sample_count++ + param.ANIMATE * float(param.FrameCount % 8191)));
+        // offset = 0.35 * sqrt(-2.0 * log(offset.x)) *
+        //          vec2(cos(2 * PI * offset.y), sin(2 * PI * offset.y));
+        // // Apply rotation
+        // offset = rot * offset;
 
         // Apply distortion
         offset = dist * offset;
