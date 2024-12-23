@@ -1,7 +1,7 @@
 #version 450
 
 /*
-    crt-1tap v1.2 by fishku
+    crt-1tap v2.0 by fishku
     Copyright (C) 2023
     Public domain license (CC0)
 
@@ -21,20 +21,20 @@
     for even and odd integer scaling.
 
     Changelog:
-    v1.3: Revamp the algorithm for brighter output.
+    v2.0: Revamp the algorithm for brighter output.
     v1.2: Better scanline sharpness; Minor cleanups.
     v1.1: Update license; Better defaults; Don't compute alpha.
     v1.0: Initial release.
 */
 
 // clang-format off
-#pragma parameter CRT1TAP_SETTINGS "=== CRT-1tap v1.3 settings ===" 0.0 0.0 1.0 1.0
+#pragma parameter CRT1TAP_SETTINGS "=== CRT-1tap v2.0 settings ===" 0.0 0.0 1.0 1.0
 #pragma parameter MIN_THICK "Scanline thickness of dark pixels" 0.1 0.0 1.0 0.05
 #pragma parameter MAX_THICK "Scanline thickness of bright pixels" 1.0 0.0 1.0 0.05
 #pragma parameter V_SHARP "Vertical sharpness of the scanline" 0.5 0.0 1.0 0.05
 #pragma parameter H_SHARP "Horizontal sharpness of pixel transitions" 0.15 0.0 1.0 0.05
 #pragma parameter SUBPX_POS "Scanline subpixel position" 0.3 -0.5 0.5 0.01
-#pragma parameter THICK_FALLOFF "Reduction / increase of thinner scanlines" 0.65 0.2 2.0 0.05
+#pragma parameter AA_STRENGTH "Anti-aliasing strength" 1.0 0.5 3.0 0.05
 // clang-format on
 
 layout(push_constant) uniform Push {
@@ -45,6 +45,7 @@ layout(push_constant) uniform Push {
     float V_SHARP;
     float H_SHARP;
     float SUBPX_POS;
+    float AA_STRENGTH;
 }
 param;
 
@@ -73,45 +74,42 @@ float slopestep(float x, float slope) {
     return o - 0.5 * s * pow(2.0 * (o - s * x), slope);
 }
 
-// Cumulative energy function
-vec3 cef(float x, float m, vec3 x0, vec3 y0) {
-    const vec3 xs = clamp((x - x0) / m, vec3(0.0), vec3(1.0));
-    const vec3 xs2 = xs * xs;
-    return y0 * (min(x0, vec3(x)) + m * (xs - xs * xs2 + 0.5 * xs2 * xs2));
-}
-
 void main() {
     vec2 tx_coord_i;
     vec2 tx_coord_f = modf(tx_coord, tx_coord_i);
 
+    // tx_coord_f.x = sqrt(tx_coord_f.x);
+    // tx_coord_f.x *= tx_coord_f.x;
     tx_coord_f.x = slopestep(tx_coord_f.x, mix(1.0, 6.0, param.H_SHARP));
 
     vec3 signal = texture(Source, (tx_coord_i + vec2(tx_coord_f.x - 0.5, 0.5)) *
                                       param.OriginalSize.zw)
                       .rgb;
-    signal *= signal * param.MAX_THICK;
-
-    // Variables that govern the scanline shape
-    const float m = param.OriginalSize.y * param.OutputSize.w * 3.0;
-    const float min_thick = param.MIN_THICK * 0.5;
-    const vec3 x0 = max(vec3(min_thick), 0.5 * (signal - m));
-    const vec3 y0 = min(vec3(1.0), signal / (2.0 * min_thick + m));
+    signal *= signal * param.MAX_THICK * 0.5;
 
     tx_coord_f.y -= 0.5;
-    float upper_edge =
-        tx_coord_f.y - 0.5 * param.OutputSize.w * param.OriginalSize.y;
-    float lower_edge =
-        tx_coord_f.y + 0.5 * param.OutputSize.w * param.OriginalSize.y;
-    if (upper_edge * lower_edge > 0.0) {
+    float px_upper_edge = tx_coord_f.y - 0.5 * param.OutputSize.w *
+                                             param.OriginalSize.y *
+                                             param.AA_STRENGTH;
+    float px_lower_edge = tx_coord_f.y + 0.5 * param.OutputSize.w *
+                                             param.OriginalSize.y *
+                                             param.AA_STRENGTH;
+
+    if (px_upper_edge * px_lower_edge > 0.0) {
         // both on same side of half
-        // cef is monotonic, so can always take the absolute difference.
-        FragColor.rgb = abs(cef(abs(upper_edge), m, x0, y0) -
-                            cef(abs(lower_edge), m, x0, y0));
+        vec3 upper = min(signal, max(abs(px_lower_edge), abs(px_upper_edge)));
+        vec3 lower = vec3(min(abs(px_lower_edge), abs(px_upper_edge)));
+        FragColor.rgb =
+            (upper - lower) /
+            (param.OutputSize.w * param.OriginalSize.y * param.AA_STRENGTH);
     } else {
         // opposite sides -- treat as two pixels with other border at center
-        FragColor.rgb = cef(abs(upper_edge), m, x0, y0) +
-                               cef(abs(lower_edge), m, x0, y0);
+        vec3 upper1 = min(signal, abs(px_upper_edge));
+        vec3 upper2 = min(signal, abs(px_lower_edge));
+        FragColor.rgb =
+            (upper1 + upper2) /
+            (param.OutputSize.w * param.OriginalSize.y * param.AA_STRENGTH);
     }
-    FragColor.rgb = sqrt(FragColor.rgb * param.OriginalSize.w * param.OutputSize.y);
+    FragColor.rgb = sqrt(FragColor.rgb);
     FragColor.a = 1.0;
 }
