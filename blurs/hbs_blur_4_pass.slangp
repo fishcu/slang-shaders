@@ -1,0 +1,41 @@
+shaders = 4
+
+shader0 = shaders/hbs_blur/to_lin.slang
+filter_linear0 = false
+scale_type0 = source
+scale0 = 1.0
+float_framebuffer0 = true
+
+shader1 = shaders/hbs_blur/downsample2x.slang
+filter_linear1 = true
+scale_type1 = source
+scale1 = 0.5
+float_framebuffer1 = true
+wrap_mode1 = mirrored_repeat
+
+shader2 = shaders/hbs_blur/downsample2x.slang
+filter_linear2 = true
+scale_type2 = source
+scale2 = 0.5
+float_framebuffer2 = true
+wrap_mode2 = mirrored_repeat
+
+# shader3 = shaders/hbs_blur/upsample2x.slang
+# filter_linear3 = true
+# scale_type3 = source
+# scale3 = 2.0
+# float_framebuffer3 = true
+# wrap_mode3 = mirrored_repeat
+# 
+# shader4 = shaders/hbs_blur/upsample2x.slang
+# filter_linear4 = true
+# scale_type4 = source
+# scale4 = 2.0
+# float_framebuffer4 = true
+# wrap_mode4 = mirrored_repeat
+
+shader3 = shaders/hbs_blur/to_srgb.slang
+filter_linear3 = false
+scale_type3 = viewport
+scale3 = 1.0
+
